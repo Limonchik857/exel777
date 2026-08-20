@@ -17,6 +17,12 @@ SORT = "sort"
 FIND_REPLACE = "find_replace"
 REMOVE_EMPTY_ROWS = "remove_empty_rows"
 NORMALIZE_PHONE = "normalize_phone"
+NORMALIZE_TEXT = "normalize_text"
+NORMALIZE_DATES = "normalize_dates"
+CONVERT_TYPE = "convert_type"
+EXTRACT = "extract"
+SPLIT = "split"
+APPEND = "append"
 
 OPERATION_TYPES = [
     (REMOVE_DUPLICATES, "Удалить дубликаты"),
@@ -26,6 +32,12 @@ OPERATION_TYPES = [
     (FIND_REPLACE, "Найти и заменить"),
     (REMOVE_EMPTY_ROWS, "Удалить пустые строки"),
     (NORMALIZE_PHONE, "Нормализовать телефон"),
+    (NORMALIZE_TEXT, "Нормализовать текст"),
+    (NORMALIZE_DATES, "Нормализовать даты"),
+    (CONVERT_TYPE, "Изменить тип столбца"),
+    (EXTRACT, "Извлечь из текста"),
+    (SPLIT, "Разделить таблицу"),
+    (APPEND, "Добавить данные"),
 ]
 
 OPERATION_CHOICES = [(key, label) for key, label in OPERATION_TYPES]
@@ -41,6 +53,12 @@ OPERATION_ICONS = {
     FIND_REPLACE: "⌕",
     REMOVE_EMPTY_ROWS: "⌫",
     NORMALIZE_PHONE: "☎",
+    NORMALIZE_TEXT: "Aa",
+    NORMALIZE_DATES: "◷",
+    CONVERT_TYPE: "⇄",
+    EXTRACT: "⌗",
+    SPLIT: "⫸",
+    APPEND: "⨭",
 }
 
 OPERATION_DESCRIPTIONS = {
@@ -51,6 +69,12 @@ OPERATION_DESCRIPTIONS = {
     FIND_REPLACE: "Заменяет одни значения на другие.",
     REMOVE_EMPTY_ROWS: "Удаляет строки, полностью лишённые данных.",
     NORMALIZE_PHONE: "Приводит телефоны в столбце к единому виду +7…",
+    NORMALIZE_TEXT: "Выравнивает текст: trim, пробелы, регистр.",
+    NORMALIZE_DATES: "Приводит даты к выбранному формату.",
+    CONVERT_TYPE: "Преобразует тип столбца: текст, число, дата.",
+    EXTRACT: "Извлекает из текста email, телефон, числа, ссылки.",
+    SPLIT: "Разделяет таблицу на несколько файлов по значению столбца.",
+    APPEND: "Добавляет строки из другого файла в текущую таблицу.",
 }
 
 # Операторы фильтрации
@@ -68,9 +92,47 @@ FILTER_OPERATORS = {
 NUMERIC_OPERATORS = {"eq", "ne", "gt", "lt", "gte", "lte"}
 STRING_OPERATORS = {"contains", "not_contains"}
 
+# Форматы дат
+DATE_FORMATS = {
+    "DD.MM.YYYY": "%d.%m.%Y",
+    "YYYY-MM-DD": "%Y-%m-%d",
+    "DD.MM.YYYY HH:MM": "%d.%m.%Y %H:%M",
+    "YYYY-MM-DD HH:MM": "%Y-%m-%d %H:%M",
+}
+
+# Типы для конвертации
+CONVERT_TARGETS = {"number": "Число", "text": "Текст", "date": "Дата"}
+
+# Режимы извлечения
+EXTRACT_MODES = {
+    "email": "Email",
+    "phone": "Телефон",
+    "number": "Число",
+    "url": "URL",
+    "before": "Текст до разделителя",
+    "after": "Текст после разделителя",
+}
+
+# Операции, которые можно сохранять в workflow/pipeline
+WORKFLOW_SAFE_OPERATIONS = {
+    REMOVE_DUPLICATES,
+    DROP_COLUMNS,
+    FILTER,
+    SORT,
+    FIND_REPLACE,
+    REMOVE_EMPTY_ROWS,
+    NORMALIZE_PHONE,
+    NORMALIZE_TEXT,
+    NORMALIZE_DATES,
+    CONVERT_TYPE,
+    EXTRACT,
+}
+
 # Порядок операций в визарде обработки (для кнопок «быстрых операций»)
 QUICK_OPERATIONS = [REMOVE_DUPLICATES, DROP_COLUMNS, FILTER, SORT,
-                    FIND_REPLACE, REMOVE_EMPTY_ROWS, NORMALIZE_PHONE]
+                    FIND_REPLACE, REMOVE_EMPTY_ROWS, NORMALIZE_PHONE,
+                    NORMALIZE_TEXT, NORMALIZE_DATES, CONVERT_TYPE, EXTRACT,
+                    SPLIT, APPEND]
 
 PHONE_RE = re.compile(r"\+?\s*7\s*[-()\s]*\d{3}\s*[-()\s]*\d{3}\s*[-()\s]*\d{2}\s*[-()\s]*\d{2}")
 DIGITS_RE = re.compile(r"\D")
@@ -125,6 +187,24 @@ def describe_operation(op_type, config):
             return "Удалить пустые строки"
         if op_type == NORMALIZE_PHONE:
             return f"Нормализовать телефон: {config.get('column', '?')}"
+        if op_type == NORMALIZE_TEXT:
+            modes = config.get("modes", [])
+            names = {"trim": "trim", "collapse_spaces": "пробелы", "lower": "lower", "upper": "upper", "title": "title"}
+            shown = ", ".join(names.get(m, m) for m in modes)
+            return f"Нормализовать текст: {config.get('column', '?')} ({shown})"
+        if op_type == NORMALIZE_DATES:
+            return f"Даты → {config.get('format', '?')}: {config.get('column', '?')}"
+        if op_type == CONVERT_TYPE:
+            target = CONVERT_TARGETS.get(config.get("target", ""), config.get("target", "?"))
+            return f"Тип «{config.get('column', '?')}» → {target}"
+        if op_type == EXTRACT:
+            mode = EXTRACT_MODES.get(config.get("mode", ""), config.get("mode", "?"))
+            suffix = f" после «{config.get('separator', '')}»" if config.get("mode") in ("before", "after") else ""
+            return f"Извлечь {mode}: {config.get('column', '?')}{suffix}"
+        if op_type == SPLIT:
+            return f"Разделить по столбцу: {config.get('column', '?')}"
+        if op_type == APPEND:
+            return "Добавить данные из файла"
     except Exception:
         pass
     return label
@@ -185,5 +265,50 @@ def validate_operation_config(op_type, config):
         column = config.get("column")
         if not column:
             raise OperationError("Выберите столбец с телефонами.")
+
+    elif op_type == NORMALIZE_TEXT:
+        column = config.get("column")
+        modes = config.get("modes")
+        if not column:
+            raise OperationError("Выберите столбец для нормализации текста.")
+        if not isinstance(modes, list) or not modes:
+            raise OperationError("Выберите хотя бы один режим нормализации.")
+        allowed = {"trim", "collapse_spaces", "lower", "upper", "title"}
+        if not set(modes) <= allowed:
+            raise OperationError("Неизвестный режим нормализации.")
+
+    elif op_type == NORMALIZE_DATES:
+        column = config.get("column")
+        fmt = config.get("format")
+        if not column:
+            raise OperationError("Выберите столбец с датами.")
+        if fmt not in DATE_FORMATS:
+            raise OperationError("Выберите формат даты.")
+
+    elif op_type == CONVERT_TYPE:
+        column = config.get("column")
+        target = config.get("target")
+        if not column:
+            raise OperationError("Выберите столбец.")
+        if target not in CONVERT_TARGETS:
+            raise OperationError("Выберите целевой тип.")
+
+    elif op_type == EXTRACT:
+        column = config.get("column")
+        mode = config.get("mode")
+        if not column:
+            raise OperationError("Выберите столбец.")
+        if mode not in EXTRACT_MODES:
+            raise OperationError("Выберите режим извлечения.")
+        if mode in ("before", "after"):
+            config.setdefault("separator", "")
+
+    elif op_type == SPLIT:
+        column = config.get("column")
+        if not column:
+            raise OperationError("Выберите столбец для разделения.")
+
+    elif op_type == APPEND:
+        config.setdefault("columns", [])
 
     return config

@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% load core_tags %}
+
+{% block title %}Data Quality{% endblock %}
+
+{% block content %}
+<div class="page page--wide">
+    <div class="page-head">
+        <div>
+            <h1>Data Quality</h1>
+            <p class="page-desc">
+                Файл: <span class="mono">{{ source_name }}</span> ·
+                {{ total_rows }} строк ·
+                {{ report.columns }} столбцов
+            </p>
+        </div>
+        <div class="panel-actions">
+            <a href="{% url 'files:processor' %}" class="btn">← Обработка</a>
+        </div>
+    </div>
+
+    <div class="quality-hero">
+        <div class="score-ring score-ring--{{ report.status|lower }}">
+            <div class="score-ring__value">{{ report.score }}</div>
+            <div class="score-ring__total">/ 100</div>
+        </div>
+        <div class="quality-hero__info">
+            <div class="quality-hero__title">
+                Data Quality Score
+                <span class="badge badge--{{ report.status|lower }}">{{ report.status }}</span>
+            </div>
+            <div class="quality-hero__metrics">
+                <div class="metric">
+                    <span class="metric__value">{{ report.breakdown.email_valid_pct }}%</span>
+                    <span class="metric__label">Email валиден</span>
+                </div>
+                <div class="metric">
+                    <span class="metric__value">{{ report.breakdown.phone_valid_pct }}%</span>
+                    <span class="metric__label">Телефоны валидны</span>
+                </div>
+                <div class="metric">
+                    <span class="metric__value">{{ report.breakdown.duplicate_pct }}%</span>
+                    <span class="metric__label">Дубликаты</span>
+                </div>
+                <div class="metric">
+                    <span class="metric__value">{{ report.breakdown.empty_pct }}%</span>
+                    <span class="metric__label">Пустые значения</span>
+                </div>
+                <div class="metric">
+                    <span class="metric__value">{{ report.breakdown.invalid_dates_pct }}%</span>
+                    <span class="metric__label">Некорректные даты</span>
+                </div>
+            </div>
+            <div class="quality-hero__meta">
+                Заполненность {{ report.fill_rate }}% ·
+                Уникальность {{ report.unique_rate }}% ·
+                Пустых значений {{ report.empty_values }} ·
+                Дубликатов {{ report.duplicates }}
+            </div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-head">
+            <span class="panel-title">Проблемы качества</span>
+        </div>
+        {% if report.issues %}
+        <div class="issue-list">
+            {% for issue in report.issues %}
+            <div class="issue-card issue-card--{{ issue.severity }}">
+                <div class="issue-card__head">
+                    <span class="badge badge--{{ issue.severity }}">
+                        {% if issue.severity == "error" %}ERROR{% elif issue.severity == "warning" %}WARNING{% else %}INFO{% endif %}
+                    </span>
+                    <span class="issue-card__title">{{ issue.title }}</span>
+                </div>
+                <p class="issue-card__msg">{{ issue.message }}</p>
+                <div class="issue-card__actions">
+                    {% if issue.rows %}
+                    <details class="show-rows">
+                        <summary class="btn btn-sm">Show rows</summary>
+                        <div class="show-rows__body">
+                            {% with table=issue_rows|get_item:issue.category %}
+                            {% if table %}
+                            <div class="table-wrap">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            {% for col in table.columns %}
+                                            <th>{{ col }}</th>
+                                            {% endfor %}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for row in table.rows %}
+                                        <tr>
+                                            {% for col in table.columns %}
+                                            <td>{{ row|get_item:col }}</td>
+                                            {% endfor %}
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <p class="page-sub">Строки недоступны.</p>
+                            {% endif %}
+                            {% endwith %}
+                        </div>
+                    </details>
+                    {% endif %}
+                    {% if issue.action %}
+                    <a href="{% url 'files:processor' %}?op={{ issue.action }}" class="btn btn--primary btn-sm">
+                        {{ issue.action_label }}
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty">
+            <div class="empty__icon">✓</div>
+            <div class="empty__title">Проблем не найдено</div>
+            <div class="empty__desc">Данные выглядят чистыми.</div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="panel">
+        <div class="panel-head">
+            <span class="panel-title">Типы столбцов</span>
+        </div>
+        <div class="form-group">
+            {% for col, kind in column_types.items %}
+            <span class="tag tag--{% if kind == 'numeric' %}accent{% elif kind == 'date' %}hot{% else %}violet{% endif %} mono">{{ col }} · {{ kind }}</span>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

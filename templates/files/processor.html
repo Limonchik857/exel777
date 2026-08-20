@@ -16,6 +16,7 @@
             </p>
         </div>
         <div class="panel-actions">
+            <a href="{% url 'quality:index' %}" class="btn btn--ghost">Анализ качества</a>
             <a href="{% url 'files:download' %}?fmt=xlsx" class="btn btn--success">Скачать XLSX</a>
             <a href="{% url 'files:download' %}?fmt=csv" class="btn">Скачать CSV</a>
             <a href="{% url 'files:upload' %}" class="btn btn--ghost">Новый файл</a>
@@ -269,6 +270,148 @@
                     </div>
                     <div class="form-actions">
                         <button type="submit" class="btn btn--primary">Нормализовать</button>
+                    </div>
+                </form>
+                {% elif active_op == "normalize_text" %}
+                <form method="post" action="{% url 'files:apply' %}" class="form">
+                    {% csrf_token %}
+                    <input type="hidden" name="op" value="normalize_text">
+                    <div class="form-group">
+                        <label class="form-label" for="nt-col">Столбец</label>
+                        <select name="column" id="nt-col">
+                            {% for col in columns %}
+                            <option value="{{ col }}">{{ col }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Режимы</label>
+                        <div class="form-row">
+                            <label class="check"><input type="checkbox" name="modes" value="trim" checked><span class="check__box">✓</span> Убрать пробелы по краям</label>
+                            <label class="check"><input type="checkbox" name="modes" value="collapse_spaces"><span class="check__box">✓</span> Убрать двойные пробелы</label>
+                        </div>
+                        <div class="form-row">
+                            <label class="check"><input type="checkbox" name="modes" value="lower"><span class="check__box">✓</span> Нижний регистр</label>
+                            <label class="check"><input type="checkbox" name="modes" value="upper"><span class="check__box">✓</span> Верхний регистр</label>
+                            <label class="check"><input type="checkbox" name="modes" value="title"><span class="check__box">✓</span> Заглавные буквы</label>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn--primary">Нормализовать текст</button>
+                    </div>
+                </form>
+                {% elif active_op == "normalize_dates" %}
+                <form method="post" action="{% url 'files:apply' %}" class="form">
+                    {% csrf_token %}
+                    <input type="hidden" name="op" value="normalize_dates">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="nd-col">Столбец с датами</label>
+                            <select name="column" id="nd-col">
+                                {% for col in columns %}
+                                <option value="{{ col }}">{{ col }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="nd-fmt">Формат</label>
+                            <select name="format" id="nd-fmt">
+                                <option value="DD.MM.YYYY">ДД.ММ.ГГГГ</option>
+                                <option value="YYYY-MM-DD">ГГГГ-ММ-ДД</option>
+                                <option value="DD.MM.YYYY HH:MM">ДД.ММ.ГГГГ ЧЧ:ММ</option>
+                                <option value="YYYY-MM-DD HH:MM">ГГГГ-ММ-ДД ЧЧ:ММ</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn--primary">Нормализовать даты</button>
+                    </div>
+                </form>
+                {% elif active_op == "convert_type" %}
+                <form method="post" action="{% url 'files:apply' %}" class="form">
+                    {% csrf_token %}
+                    <input type="hidden" name="op" value="convert_type">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="ct-col">Столбец</label>
+                            <select name="column" id="ct-col">
+                                {% for col in columns %}
+                                <option value="{{ col }}">{{ col }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="ct-target">Преобразовать в</label>
+                            <select name="target" id="ct-target">
+                                <option value="number">Число</option>
+                                <option value="text">Текст</option>
+                                <option value="date">Дата</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn--primary">Изменить тип</button>
+                    </div>
+                </form>
+                {% elif active_op == "extract" %}
+                <form method="post" action="{% url 'files:apply' %}" class="form">
+                    {% csrf_token %}
+                    <input type="hidden" name="op" value="extract">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="ex-col">Столбец</label>
+                            <select name="column" id="ex-col">
+                                {% for col in columns %}
+                                <option value="{{ col }}">{{ col }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="ex-mode">Извлечь</label>
+                            <select name="mode" id="ex-mode">
+                                <option value="email">Email</option>
+                                <option value="phone">Телефон</option>
+                                <option value="number">Число</option>
+                                <option value="url">URL</option>
+                                <option value="before">Текст до разделителя</option>
+                                <option value="after">Текст после разделителя</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="ex-sep">Разделитель (для «до/после»)</label>
+                        <input type="text" name="separator" id="ex-sep" placeholder="Например: @">
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn--primary">Извлечь</button>
+                    </div>
+                </form>
+                {% elif active_op == "split" %}
+                <form method="post" action="{% url 'files:split' %}" class="form">
+                    {% csrf_token %}
+                    <div class="form-group">
+                        <label class="form-label" for="sp-col">Столбец для разделения</label>
+                        <select name="column" id="sp-col">
+                            {% for col in columns %}
+                            <option value="{{ col }}">{{ col }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-hint">По каждому значению будет создан отдельный файл.</div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn--primary">Разделить</button>
+                    </div>
+                </form>
+                {% elif active_op == "append" %}
+                <form method="post" action="{% url 'files:append' %}" class="form" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <div class="form-group">
+                        <label class="form-label" for="ap-file">Файл с данными для добавления</label>
+                        <input type="file" name="file" id="ap-file" accept=".xlsx,.csv">
+                        <div class="form-hint">Строки будут добавлены в конец текущей таблицы. Столбцы должны совпадать.</div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn--primary">Добавить данные</button>
                     </div>
                 </form>
                 {% else %}

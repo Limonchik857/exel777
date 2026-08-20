@@ -4,10 +4,15 @@
 где meta — dict со сведениями для истории и сообщений пользователю.
 """
 
+import re
+
 import numpy as np
 import pandas as pd
 
 from .services import (
+    CONVERT_TARGETS,
+    DATE_FORMATS,
+    EXTRACT_MODES,
     FILTER_OPERATORS,
     NUMERIC_OPERATORS,
     STRING_OPERATORS,
@@ -199,6 +204,178 @@ def normalize_phone(df, config):
     return df, {"column": column}
 
 
+def _to_text(value):
+    if value is None or pd.isna(value):
+        return ""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    if isinstance(value, np.integer):
+        return str(int(value))
+    if isinstance(value, np.floating):
+        number = float(value)
+        return str(int(number)) if number.is_integer() else str(number)
+    return str(value)
+
+
+def _parse_dates(series):
+    """Парсит даты с поддержкой DD.MM.YYYY и YYYY-MM-DD одновременно."""
+    text = series.astype(str)
+    iso_mask = text.str.match(r"^\d{4}-\d{2}-\d{2}", na=False)
+    parsed = pd.Series(pd.NaT, index=series.index, dtype="datetime64[ns]")
+    if iso_mask.any():
+        parsed.loc[iso_mask] = pd.to_datetime(text[iso_mask], errors="coerce")
+    rest_mask = (~iso_mask) & series.notna()
+    if rest_mask.any():
+        parsed.loc[rest_mask] = pd.to_datetime(
+            text[rest_mask], errors="coerce", dayfirst=True
+        )
+    return parsed
+
+
+def normalize_text(df, config):
+    """Нормализует текст в столбце: trim, схлопывание пробелов, регистр."""
+    config = validate_operation_config("normalize_text", config)
+    column = config["column"]
+    modes = config["modes"]
+    _ensure_columns(df, [column])
+    df = df.copy()
+
+    def apply_modes(value):
+        if _is_whitespace_or_empty(value):
+            return value
+        text = str(value)
+        if "trim" in modes:
+            text = text.strip()
+        if "collapse_spaces" in modes:
+            text = re.sub(r"\s+", " ", text).strip()
+        if "lower" in modes:
+            text = text.lower()
+        elif "upper" in modes:
+            text = text.upper()
+        elif "title" in modes:
+            text = text.title()
+        return text
+
+    df[column] = df[column].map(apply_modes)
+    return df, {"column": column, "modes": modes}
+
+
+def normalize_dates(df, config):
+    """Приводит даты в столбце к выбранному формату."""
+    config = validate_operation_config("normalize_dates", config)
+    column = config["column"]
+    fmt = config["format"]
+    _ensure_columns(df, [column])
+    df = df.copy()
+    series = df[column]
+    parsed = _parse_dates(series)
+    converted = int(parsed.notna().sum())
+    df[column] = parsed.map(
+        lambda v: v.strftime(DATE_FORMATS[fmt]) if pd.notna(v) else v
+    )
+    return df, {"column": column, "format": fmt, "converted": converted}
+
+
+def convert_type(df, config):
+    """Преобразует тип столбца: number / text / date."""
+    config = validate_operation_config("convert_type", config)
+    column = config["column"]
+    target = config["target"]
+    _ensure_columns(df, [column])
+    df = df.copy()
+    series = df[column]
+    converted = int(series.notna().sum())
+    if target == "number":
+        df[column] = pd.to_numeric(series, errors="coerce")
+    elif target == "text":
+        df[column] = series.map(_to_text)
+    elif target == "date":
+        df[column] = _parse_dates(series)
+    return df, {"column": column, "target": target, "converted": converted}
+
+
+EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
+URL_RE = re.compile(r"https?://[^\s]+")
+NUMBER_RE = re.compile(r"[-+]?\d[\d\s]*[.,]?\d*")
+PHONE_RE = re.compile(r"(?:\+?7|8)?[\s\-()]*\d{3}[\s\-()]*\d{3}[\s\-()]*\d{2}[\s\-()]*\d{2}")
+
+
+def _extract_value(value, mode, separator):
+    if value is None or pd.isna(value):
+        return value
+    text = str(value)
+    if mode == "email":
+        match = EMAIL_RE.search(text)
+        return match.group(0) if match else ""
+    if mode == "phone":
+        match = PHONE_RE.search(text)
+        if match:
+            return re.sub(r"\D", "", match.group(0))
+        return ""
+    if mode == "number":
+        match = NUMBER_RE.search(text)
+        return match.group(0).replace(" ", "") if match else ""
+    if mode == "url":
+        match = URL_RE.search(text)
+        return match.group(0) if match else ""
+    if mode == "before":
+        return text.split(separator)[0] if separator else ""
+    if mode == "after":
+        if not separator:
+            return ""
+        parts = text.split(separator)
+        return separator.join(parts[1:]) if len(parts) > 1 else ""
+    return text
+
+
+def extract(df, config):
+    """Извлекает из текста email/телефон/число/URL или текст до/после разделителя."""
+    config = validate_operation_config("extract", config)
+    column = config["column"]
+    mode = config["mode"]
+    separator = config.get("separator", "")
+    _ensure_columns(df, [column])
+    df = df.copy()
+    df[column] = df[column].map(lambda v: _extract_value(v, mode, separator))
+    return df, {"column": column, "mode": mode}
+
+
+def split_table(df, config):
+    """Разделяет таблицу на части по значению столбца.
+
+    Возвращает (dict{value: df}, meta) — в отличие от обычных операций.
+    """
+    config = validate_operation_config("split", config)
+    column = config["column"]
+    _ensure_columns(df, [column])
+    parts = {}
+    for value, group in df.groupby(df[column], dropna=False):
+        key = "пустое" if value is None or (isinstance(value, float) and pd.isna(value)) else str(value)
+        parts[key] = group.copy()
+    counts = {k: len(v) for k, v in parts.items()}
+    return parts, {"column": column, "parts": counts, "total": len(df)}
+
+
+def append_tables(df, other_df, config=None):
+    """Добавляет строки другого файла в текущую таблицу.
+
+    Не является линейной операцией: требует второй источник данных.
+    Возвращает (merged_df, meta).
+    """
+    if config is None:
+        config = {}
+    columns = list(df.columns)
+    missing = [c for c in other_df.columns if c not in df.columns]
+    if missing:
+        raise OperationError(
+            f"Файл для добавления содержит столбцы, которых нет в таблице: "
+            f"{', '.join(missing[:5])}."
+        )
+    other = other_df[columns]
+    merged = pd.concat([df, other], ignore_index=True, sort=False)
+    return merged, {"added": len(other), "total": len(merged)}
+
+
 def apply_operation(df, op_type, config):
     """Точка входа: применяет операцию к DataFrame, возвращает (df, meta)."""
     if op_type == "remove_duplicates":
@@ -215,6 +392,20 @@ def apply_operation(df, op_type, config):
         return remove_empty_rows(df, config)
     if op_type == "normalize_phone":
         return normalize_phone(df, config)
+    if op_type == "normalize_text":
+        return normalize_text(df, config)
+    if op_type == "normalize_dates":
+        return normalize_dates(df, config)
+    if op_type == "convert_type":
+        return convert_type(df, config)
+    if op_type == "extract":
+        return extract(df, config)
+    if op_type == "split":
+        return split_table(df, config)
+    if op_type == "append":
+        raise OperationError(
+            "Операция «Добавить данные» требует второй файл и выполняется отдельно."
+        )
     raise OperationError("Неизвестная операция.")
 
 

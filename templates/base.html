@@ -26,8 +26,12 @@
                class="nav-link {% if section == 'dashboard' %}active{% endif %}">Dashboard</a>
             <a href="{% url 'files:index' %}" title="Загруженные и обработанные таблицы"
                class="nav-link {% if section == 'files' %}active{% endif %}">Файлы</a>
+            <a href="{% url 'files:processor' %}" title="Обработка текущего файла"
+               class="nav-link {% if section == 'processor' %}active{% endif %}">Обработка</a>
+            <a href="{% url 'quality:index' %}" title="Анализ качества данных"
+               class="nav-link {% if section == 'quality' %}active{% endif %}">Quality</a>
             <a href="{% url 'workflows:index' %}" title="Сохранённые последовательности операций"
-               class="nav-link {% if section == 'workflows' %}active{% endif %}">Workflow</a>
+               class="nav-link {% if section == 'workflows' %}active{% endif %}">Пайплайны</a>
             <a href="{% url 'files:history' %}" title="История обработки"
                class="nav-link {% if section == 'history' %}active{% endif %}">История</a>
             <a href="{% url 'core:settings' %}" title="Настройки"

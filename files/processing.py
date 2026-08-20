@@ -3,10 +3,16 @@
 Каждая версия таблицы сохраняется в pickle-файл на диск — это позволяет
 делать отмену/повтор и не хранить DataFrame в сессии (память браузера).
 
-Соглашение: versions[0] — исходная таблица; versions[i] — результат после
-i-й операции (история[0..i-1]). Поле current указывает на активную версию.
-При отмене current уменьшается, история остаётся полной; при новой операции
-«хвост» после current отбрасывается.
+Модель данных:
+
+    versions[0]           — исходная таблица
+    versions[i]           — результат после i операций
+    history_snapshots[i]  — полный список операций, применённых к versions[i]
+    current               — индекс активной версии
+
+Такая модель гарантирует синхронность versions / history / current:
+даже после Undo → новая операция старая ветка полностью отбрасывается,
+а при trimming старых версий снимки истории остаются консистентными.
 """
 
 import secrets
@@ -60,12 +66,14 @@ def start_session(request, uploaded_file_id, source_name, df, columns, rows):
         "versions": [],
         "current": 0,
         "history": [],
+        "history_snapshots": [],
         "columns": columns,
         "rows": rows,
         "rows_original": rows,
     }
     first_path = _save_df(request, df, 0)
     request.session["processing"]["versions"] = [first_path]
+    request.session["processing"]["history_snapshots"] = [[]]
     request.session.modified = True
 
 
@@ -86,19 +94,26 @@ def current_df(request):
 
 
 def applied_history(state):
-    """Операции, фактически применённые к текущей версии."""
-    return state["history"][: state["current"]]
+    """Операции, фактически применённые к текущей версии (не меняет состояние)."""
+    snapshots = state.get("history_snapshots")
+    if snapshots:
+        return list(snapshots[state["current"]])
+    # Совместимость со старыми сессиями без снимков.
+    return list(state.get("history", [])[: state["current"]])
 
 
 def apply_operation(request, df, op_type, config, meta):
-    """Сохраняет результат операции как новую версию и пишет в историю."""
+    """Сохраняет результат операции как новую версию и пишет в историю.
+
+    Отбрасывает «хвост» после current (Undo → новая операция), сохраняя
+    versions / history / current синхронизированными.
+    """
     state = get_state(request)
     new_index = state["current"] + 1
     path = _save_df(request, df, new_index)
 
-    # Отбрасываем «повторы» вперёд при новой операции
-    state["versions"] = state["versions"][:new_index] + [path]
-    state["history"] = state["history"][:new_index] + [
+    prev_history = applied_history(state)
+    new_snapshot = prev_history + [
         {
             "op": op_type,
             "config": config,
@@ -106,12 +121,20 @@ def apply_operation(request, df, op_type, config, meta):
             "meta": meta,
         }
     ]
+    max_steps = settings.MAX_UNDO_STEPS
+    if len(new_snapshot) > max_steps:
+        new_snapshot = new_snapshot[-max_steps:]
+
+    # Отбрасываем «повторы» вперёд при новой операции
+    state["versions"] = state["versions"][:new_index] + [path]
+    state["history_snapshots"] = state["history_snapshots"][:new_index] + [new_snapshot]
     state["current"] = new_index
     state["rows"] = len(df)
+    state["history"] = list(new_snapshot)
 
-    # Ограничиваем число хранимых версий
-    if len(state["versions"]) > settings.MAX_UNDO_STEPS:
-        keep_from = len(state["versions"]) - settings.MAX_UNDO_STEPS
+    # Ограничиваем число хранимых версий.
+    if len(state["versions"]) > max_steps:
+        keep_from = len(state["versions"]) - max_steps
         excess = state["versions"][:keep_from]
         for p in excess:
             try:
@@ -119,8 +142,9 @@ def apply_operation(request, df, op_type, config, meta):
             except Exception:
                 pass
         state["versions"] = state["versions"][keep_from:]
-        state["history"] = state["history"][keep_from - 1:]
+        state["history_snapshots"] = state["history_snapshots"][keep_from:]
         state["current"] = len(state["versions"]) - 1
+        state["history"] = list(state["history_snapshots"][state["current"]])
 
     request.session.modified = True
 

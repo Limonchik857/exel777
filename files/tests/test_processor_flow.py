@@ -98,6 +98,79 @@ class ProcessorFlowTests(TestCase):
         self.assertEqual(state["current"], 1)
         self.assertEqual(len(proc.applied_history(state)), 1)
 
+    def test_undo_then_new_operation_discards_branch(self):
+        self._upload()
+        # op1
+        self.client.post(reverse("files:apply"), {"op": "remove_empty_rows"})
+        # op2 — фильтр, оставляющий 3 строки
+        self.client.post(
+            reverse("files:apply"),
+            {"op": "filter", "column": "Salary", "operator": "gt", "value": "90000"},
+        )
+        state = self.client.session["processing"]
+        self.assertEqual(len(state["versions"]), 3)
+        self.assertEqual(len(proc.applied_history(state)), 2)
+        old_ops = [h["op"] for h in proc.applied_history(state)]
+        self.assertEqual(old_ops, ["remove_empty_rows", "filter"])
+
+        # undo → op2 отменена
+        self.client.post(reverse("files:undo"))
+        state = self.client.session["processing"]
+        self.assertEqual(state["current"], 1)
+        self.assertEqual(len(proc.applied_history(state)), 1)
+
+        # op3 вместо op2
+        self.client.post(
+            reverse("files:apply"),
+            {"op": "sort", "column": "Salary", "order": "desc"},
+        )
+        state = self.client.session["processing"]
+        self.assertEqual(state["current"], 2)
+        self.assertEqual(len(state["versions"]), 3)
+        ops = [h["op"] for h in proc.applied_history(state)]
+        self.assertEqual(ops, ["remove_empty_rows", "sort"])
+        # Текущая версия — результат op3 (сортировка), а не старого фильтра.
+        request = self._request_with_session()
+        df = proc.current_df(request)
+        self.assertEqual(len(df), 4)
+        self.assertNotEqual(
+            df["Salary"].tolist(), [100000, 80000, 120000, 100000]
+        )
+
+    def test_history_trimming_keeps_sync(self):
+        self._upload()
+        # Применяем больше операций, чем MAX_UNDO_STEPS (3).
+        with self.settings(MAX_UNDO_STEPS=3):
+            for i in range(5):
+                self.client.post(
+                    reverse("files:apply"),
+                    {"op": "filter", "column": "Salary", "operator": "gte", "value": str(i)},
+                )
+            state = self.client.session["processing"]
+            self.assertLessEqual(len(state["versions"]), 3)
+            self.assertEqual(state["current"], len(state["versions"]) - 1)
+            # История ограничена MAX_UNDO_STEPS и соответствует текущей версии.
+            self.assertEqual(len(proc.applied_history(state)), 3)
+            df = proc.current_df(self._request_with_session())
+            self.assertEqual(state["rows"], len(df))
+            # Undo из ограниченной истории остаётся синхронным.
+            request = self._request_with_session()
+            state = request.session["processing"]
+            while state["current"] > 0:
+                self.assertTrue(proc.undo(request))
+                snapshots = state["history_snapshots"]
+                self.assertEqual(
+                    len(proc.applied_history(state)),
+                    len(snapshots[state["current"]]),
+                )
+
+    def _request_with_session(self):
+        from django.test import RequestFactory
+
+        request = RequestFactory().get("/")
+        request.session = self.client.session
+        return request
+
     def test_download_creates_processed_file(self):
         self._upload()
         self.client.post(

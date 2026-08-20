@@ -6,6 +6,7 @@ urlpatterns = [
     path("", include("core.urls")),
     path("files/", include("files.urls")),
     path("workflows/", include("workflows.urls")),
+    path("quality/", include("quality.urls")),
 ]
 
 # Медиафайлы (исходные и обработанные таблицы) — личные данные пользователей.

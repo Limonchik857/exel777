@@ -2,13 +2,22 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 
+from core.ratelimit import rate_limit
 from files.services import validate_uploaded
 from operations.validators import FileValidationError
-from operations.services import OPERATION_ICONS, OPERATION_LABELS
+from operations.services import (
+    OPERATION_ICONS,
+    OPERATION_LABELS,
+    WORKFLOW_SAFE_OPERATIONS,
+)
 
-from .forms import WorkflowForm, WorkflowRunForm
+from .forms import ScheduleForm, WorkflowForm, WorkflowRunForm
 from .models import Execution, Workflow
-from .services import create_workflow_from_session, run_workflow
+from .services import (
+    apply_schedule,
+    create_workflow_from_session,
+    run_workflow,
+)
 
 
 @login_required
@@ -47,6 +56,7 @@ def detail(request, pk):
         }
         for op in operations
     ]
+    schedule_form = ScheduleForm(instance=workflow)
     return render(
         request,
         "workflows/detail.html",
@@ -56,10 +66,37 @@ def detail(request, pk):
             "operations": operations,
             "op_steps": op_steps,
             "executions": executions,
+            "schedule_form": schedule_form,
             "labels": OPERATION_LABELS,
             "icons": OPERATION_ICONS,
         },
     )
+
+
+@login_required
+def schedule(request, pk):
+    workflow = get_object_or_404(Workflow, pk=pk, user=request.user)
+    if request.method == "POST":
+        form = ScheduleForm(request.POST, instance=workflow)
+        if form.is_valid():
+            apply_schedule(workflow, form.cleaned_data)
+            if workflow.schedule_active:
+                messages.success(
+                    request,
+                    "Расписание сохранено. Следующий запуск: "
+                    + (
+                        workflow.next_run.strftime("%d.%m.%Y %H:%M")
+                        if workflow.next_run
+                        else "не определён"
+                    )
+                    + f" ({workflow.timezone}).",
+                )
+            else:
+                messages.info(request, "Расписание отключено.")
+        else:
+            messages.error(request, "Проверьте настройки расписания.")
+        return redirect("workflows:detail", pk=workflow.pk)
+    return redirect("workflows:detail", pk=workflow.pk)
 
 
 @login_required
@@ -71,7 +108,11 @@ def create_from_session(request):
 
     from files import processing as proc
 
-    steps = [h for h in proc.applied_history(state) if h.get("op") != "export"]
+    steps = [
+        h
+        for h in proc.applied_history(state)
+        if h.get("op") in WORKFLOW_SAFE_OPERATIONS
+    ]
     if not steps:
         messages.info(request, "В текущей обработке нет операций для сохранения.")
         return redirect("files:processor")
@@ -105,6 +146,10 @@ def create_from_session(request):
 
 
 @login_required
+@rate_limit(
+    "workflow_run",
+    lambda request, pk: reverse("workflows:run", args=[pk]),
+)
 def run(request, pk):
     workflow = get_object_or_404(Workflow, pk=pk, user=request.user)
     if request.method == "POST":

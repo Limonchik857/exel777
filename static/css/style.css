@@ -966,3 +966,116 @@ code, .code {
     gap: 12px;
     margin-bottom: 20px;
 }
+/* ── Data Quality ──────────────────────────────────────────── */
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    border: 1px solid var(--border-strong);
+    color: var(--text-muted);
+    background: var(--surface-2);
+}
+.badge--good { color: var(--success); border-color: rgba(63,191,127,.4); background: var(--success-dim); }
+.badge--warning { color: var(--warn); border-color: rgba(228,190,79,.4); background: rgba(228,190,79,.1); }
+.badge--critical { color: var(--error); border-color: rgba(255,92,87,.4); background: var(--error-dim); }
+.badge--error { color: var(--error); border-color: rgba(255,92,87,.4); background: var(--error-dim); }
+.badge--info { color: var(--accent); border-color: rgba(111,160,255,.4); background: var(--accent-soft); }
+
+.quality-hero {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+    padding: 20px;
+    margin-bottom: 20px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: linear-gradient(135deg, var(--surface) 0%, var(--surface-2) 100%);
+    box-shadow: var(--shadow);
+}
+.score-ring {
+    flex: 0 0 auto;
+    width: 128px;
+    height: 128px;
+    border-radius: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border: 3px solid var(--border-strong);
+    background: radial-gradient(circle at 30% 25%, var(--surface-3), var(--surface));
+}
+.score-ring--good { border-color: var(--success); box-shadow: 0 0 24px -6px var(--success); }
+.score-ring--warning { border-color: var(--warn); box-shadow: 0 0 24px -6px var(--warn); }
+.score-ring--critical { border-color: var(--error); box-shadow: 0 0 24px -6px var(--error); }
+.score-ring__value { font-family: var(--font-display); font-size: 34px; line-height: 1; }
+.score-ring__total { color: var(--text-muted); font-size: 12px; margin-top: 4px; }
+.quality-hero__info { flex: 1 1 auto; min-width: 0; }
+.quality-hero__title {
+    font-family: var(--font-display);
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    font-size: 14px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 14px;
+}
+.quality-hero__metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+.metric {
+    flex: 1 1 120px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.metric__value { font-family: var(--font-mono); font-size: 17px; }
+.metric__label { color: var(--text-muted); font-size: 12px; }
+.quality-hero__meta { color: var(--text-muted); font-size: 13px; }
+
+.issue-list { display: flex; flex-direction: column; gap: 12px; }
+.issue-card {
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border-strong);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    background: var(--surface);
+}
+.issue-card--error { border-left-color: var(--error); }
+.issue-card--warning { border-left-color: var(--warn); }
+.issue-card--info { border-left-color: var(--accent); }
+.issue-card__head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.issue-card__title { font-weight: 600; font-size: 15px; }
+.issue-card__msg { margin: 0 0 10px; color: var(--text-muted); font-size: 13px; }
+.issue-card__actions { display: flex; gap: 8px; align-items: center; }
+
+.show-rows { max-width: 100%; }
+.show-rows summary { cursor: pointer; list-style: none; }
+.show-rows summary::-webkit-details-marker { display: none; }
+.show-rows__body { margin-top: 12px; }
+
+/* ── Pipeline: история запусков ─────────────────────────── */
+
+.stage-errors { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.stage-errors__item {
+    padding: 8px 10px;
+    border: 1px solid rgba(255,92,87,.25);
+    border-radius: var(--radius-sm);
+    background: var(--error-dim);
+    font-size: 13px;
+}
+.stage-errors__msg { margin: 6px 0 0; color: var(--text-muted); }

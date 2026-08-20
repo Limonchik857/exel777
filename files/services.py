@@ -1,11 +1,13 @@
 """Чтение, проверка и экспорт таблиц (XLSX/CSV)."""
 
 import csv
-import os
 import re
+import zipfile
 from pathlib import Path
 
 import pandas as pd
+
+from django.conf import settings
 
 from operations.validators import (
     ExportError,
@@ -30,6 +32,14 @@ OCTET_STREAM = "application/octet-stream"
 CSV_ENCODINGS = ["utf-8-sig", "cp1251", "utf-8", "latin-1"]
 
 _SAFE_NAME_RE = re.compile(r"[^A-Za-zА-Яа-яЁё0-9_.\- ]+")
+
+# Защита XLSX-контейнера от ZIP-бомб.
+XLSX_MAX_ENTRIES = 10000
+XLSX_MAX_UNCOMPRESSED_TOTAL = 2 * 1024**3  # 2 GiB суммарный распакованный размер
+XLSX_MAX_COMPRESSION_RATIO = 500
+
+# Символы, с которых начинаются формулы в Excel (CSV injection).
+CSV_DANGEROUS_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 
 
 def detect_file_type(filename):
@@ -105,7 +115,63 @@ def read_csv(path, nrows=None):
     return df
 
 
+def validate_xlsx_security(path):
+    """Проверяет ZIP-контейнер XLSX на признаки ZIP-бомбы.
+
+    Отклоняет файлы с чрезмерным числом записей, слишком большим суммарным
+    распакованным размером или аномальной степенью сжатия.
+    """
+    try:
+        with zipfile.ZipFile(path, "r") as zf:
+            infos = zf.infolist()
+            if len(infos) > XLSX_MAX_ENTRIES:
+                raise TableReadError(
+                    "Файл отклонён: слишком много записей внутри XLSX-контейнера."
+                )
+            total_uncompressed = sum(info.file_size for info in infos)
+            total_compressed = sum(info.compress_size for info in infos)
+            if total_uncompressed > XLSX_MAX_UNCOMPRESSED_TOTAL:
+                raise TableReadError(
+                    "Файл отклонён: распакованный размер XLSX слишком велик."
+                )
+            if total_compressed > 0:
+                ratio = total_uncompressed / total_compressed
+                if ratio > XLSX_MAX_COMPRESSION_RATIO:
+                    raise TableReadError(
+                        "Файл отклонён: аномальная степень сжатия (подозрение на ZIP-бомбу)."
+                    )
+    except TableReadError:
+        raise
+    except zipfile.BadZipFile:
+        raise TableReadError("Файл не является корректным XLSX (сломанный ZIP-контейнер).")
+    except Exception:
+        raise TableReadError("Не удалось проверить структуру XLSX-файла.")
+
+
+def validate_table_size(df):
+    """Проверяет таблицу на ограничения rows/columns/cells до тяжёлой обработки."""
+    rows = len(df)
+    cols = len(df.columns)
+    if rows > settings.DATA_MAX_ROWS:
+        raise TableReadError(
+            f"Таблица слишком большая: {rows} строк. "
+            f"Максимум — {settings.DATA_MAX_ROWS}."
+        )
+    if cols > settings.DATA_MAX_COLUMNS:
+        raise TableReadError(
+            f"Таблица слишком широкая: {cols} столбцов. "
+            f"Максимум — {settings.DATA_MAX_COLUMNS}."
+        )
+    cells = rows * cols
+    if cells > settings.DATA_MAX_CELLS:
+        raise TableReadError(
+            f"Таблица слишком большая: {cells} ячеек. "
+            f"Максимум — {settings.DATA_MAX_CELLS}."
+        )
+
+
 def read_excel(path, nrows=None):
+    validate_xlsx_security(path)
     try:
         df = pd.read_excel(path, engine="openpyxl", nrows=nrows)
     except Exception:
@@ -127,6 +193,7 @@ def read_table(path, file_type, nrows=None):
 
     df = normalize_headers(df)
     df.columns = [str(c) for c in df.columns]
+    validate_table_size(df)
     return df
 
 
@@ -171,7 +238,19 @@ def table_info(path, file_type):
     return rows, columns, len(columns)
 
 
-def export_dataframe(df, file_type):
+def _safe_csv_value(value):
+    """Экранирует значения, с которых начинаются формулы Excel (=, +, -, @)."""
+    if value is None or pd.isna(value):
+        return ""
+    if isinstance(value, (int, float, bool)):
+        return value
+    text = str(value)
+    if text.startswith(CSV_DANGEROUS_PREFIXES):
+        return "'" + text
+    return text
+
+
+def export_dataframe(df, file_type, safe_csv=None):
     """Экспортирует DataFrame в байты (xlsx или csv). Возвращает (bytes, mime)."""
     try:
         if file_type == "xlsx":
@@ -185,8 +264,14 @@ def export_dataframe(df, file_type):
         if file_type == "csv":
             from io import StringIO
 
+            safe = settings.SAFE_CSV_EXPORT if safe_csv is None else safe_csv
+            export_df = df
+            if safe:
+                export_df = df.copy()
+                for col in export_df.columns:
+                    export_df[col] = export_df[col].map(_safe_csv_value)
             buffer = StringIO()
-            df.to_csv(buffer, index=False, encoding="utf-8")
+            export_df.to_csv(buffer, index=False, encoding="utf-8")
             # BOM для корректного открытия в Excel
             data = buffer.getvalue().encode("utf-8-sig")
             return data, "text/csv; charset=utf-8"
@@ -203,7 +288,7 @@ def suggest_result_name(source_name, file_type):
 
 def cleanup_stale_processing(user_id, session_token):
     """Бест-эфорт очистка временных файлов старой сессии обработки."""
-    root = Path("media") / "processing" / str(user_id) / session_token
+    root = processing_root(user_id, session_token)
     try:
         import shutil
 
@@ -214,4 +299,4 @@ def cleanup_stale_processing(user_id, session_token):
 
 
 def processing_root(user_id, session_token):
-    return Path("media") / "processing" / str(user_id) / session_token
+    return settings.MEDIA_ROOT / "processing" / str(user_id) / session_token

@@ -1,3 +1,6 @@
+import re
+from pathlib import Path
+
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -6,6 +9,7 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
 
+from core.ratelimit import rate_limit
 from operations.engine import apply_operation, column_kind, prepare_df_for_display
 from operations.services import (
     OPERATION_ICONS,
@@ -61,6 +65,18 @@ def _success_message(op_type, meta):
         return f"Выполнено замен: {meta.get('replacements', 0)}."
     if op_type == "normalize_phone":
         return f"Телефоны в столбце «{meta.get('column', '')}» приведены к единому виду."
+    if op_type == "normalize_text":
+        return f"Текст в столбце «{meta.get('column', '')}» нормализован."
+    if op_type == "normalize_dates":
+        return f"Даты в столбце «{meta.get('column', '')}» приведены к формату {meta.get('format', '')} (обработано {meta.get('converted', 0)})."
+    if op_type == "convert_type":
+        return f"Столбец «{meta.get('column', '')}» преобразован к типу «{meta.get('target', '')}»."
+    if op_type == "extract":
+        return f"Из столбца «{meta.get('column', '')}» извлечены данные."
+    if op_type == "append":
+        return f"Добавлено строк: {meta.get('added', 0)}. Всего строк: {meta.get('total', 0)}."
+    if op_type == "split":
+        return f"Таблица разделена на {len(meta.get('parts', {}))} файлов."
     return "Операция выполнена."
 
 
@@ -81,6 +97,7 @@ def files_index(request):
 
 
 @login_required
+@rate_limit("upload", lambda request: reverse("files:upload"))
 def upload(request):
     if request.method == "POST":
         request_file = request.FILES.get("file")
@@ -285,6 +302,41 @@ def _build_config(op_type, post):
             if not column:
                 return None
             return {"column": column}
+
+        if op_type == "normalize_text":
+            column = post.get("column", "")
+            modes = [m for m in post.getlist("modes") if m]
+            if not column or not modes:
+                return None
+            return {"column": column, "modes": modes}
+
+        if op_type == "normalize_dates":
+            column = post.get("column", "")
+            fmt = post.get("format", "")
+            if not column or not fmt:
+                return None
+            return {"column": column, "format": fmt}
+
+        if op_type == "convert_type":
+            column = post.get("column", "")
+            target = post.get("target", "")
+            if not column or not target:
+                return None
+            return {"column": column, "target": target}
+
+        if op_type == "extract":
+            column = post.get("column", "")
+            mode = post.get("mode", "")
+            if not column or not mode:
+                return None
+            separator = post.get("separator", "") if mode in ("before", "after") else ""
+            return {"column": column, "mode": mode, "separator": separator}
+
+        if op_type == "split":
+            column = post.get("column", "")
+            if not column:
+                return None
+            return {"column": column}
     except Exception:
         return None
     return None
@@ -313,6 +365,104 @@ def reset(request):
 
 
 @login_required
+@rate_limit("export", methods=("GET",))
+def split(request):
+    """Разделяет таблицу на несколько файлов по значению столбца."""
+    if request.method != "POST":
+        return redirect("files:processor")
+    if not proc.has_session(request):
+        messages.error(request, "Сначала загрузите файл.")
+        return redirect("files:upload")
+
+    config = _build_config("split", request.POST)
+    if config is None:
+        messages.error(request, "Не заполнены параметры операции.")
+        return redirect("files:processor")
+
+    from operations.engine import split_table
+
+    try:
+        df = proc.current_df(request)
+        parts, meta = split_table(df, config)
+    except OperationError as exc:
+        messages.error(request, str(exc))
+        return redirect("files:processor")
+    except Exception:
+        messages.error(request, "Произошла ошибка при разделении таблицы.")
+        return redirect("files:processor")
+
+    from django.core.files.base import ContentFile
+
+    state = proc.get_state(request)
+    created = []
+    for key, part_df in parts.items():
+        fmt = "xlsx"
+        safe_key = re.sub(r"[^A-Za-zА-Яа-яЁё0-9_-]+", "_", str(key)).strip("_") or "part"
+        result_name = f"{Path(state['source_name']).stem}_{safe_key}.xlsx"
+        data, mime = export_dataframe(part_df, fmt)
+        processed = ProcessedFile.objects.create(
+            user=request.user,
+            uploaded_file_id=state["uploaded_file_id"],
+            file_type=fmt,
+            original_name=result_name,
+            source_name=state["source_name"],
+            rows_before=len(part_df),
+            rows_after=len(part_df),
+            operations=proc.applied_history(state),
+        )
+        processed.file.save(result_name, ContentFile(data), save=True)
+        created.append((result_name, len(part_df)))
+
+    names = ", ".join(f"«{n}» ({r})" for n, r in created)
+    messages.success(request, f"Таблица разделена на {len(created)} файлов: {names}.")
+    return redirect("files:history")
+
+
+@login_required
+@rate_limit("upload", lambda request: reverse("files:append"))
+def append(request):
+    """Добавляет строки из загруженного файла в текущую таблицу."""
+    if request.method != "POST":
+        return redirect("files:processor")
+    if not proc.has_session(request):
+        messages.error(request, "Сначала загрузите файл.")
+        return redirect("files:upload")
+
+    request_file = request.FILES.get("file")
+    if request_file is None:
+        messages.error(request, "Выберите файл с данными для добавления.")
+        return redirect("files:append")
+
+    from operations.engine import append_tables
+
+    try:
+        file_type, safe_name = validate_uploaded(
+            request_file, settings.DATA_MAX_FILE_SIZE
+        )
+        df = proc.current_df(request)
+        uploaded = UploadedFile.objects.create(
+            user=request.user,
+            original_name=safe_name,
+            file=request_file,
+            file_type=file_type,
+            size=request_file.size,
+        )
+        other_df = read_table(uploaded.file.path, file_type)
+        merged, meta = append_tables(df, other_df)
+    except (FileValidationError, TableReadError, OperationError) as exc:
+        messages.error(request, str(exc))
+        return redirect("files:append")
+    except Exception:
+        messages.error(request, "Произошла ошибка при добавлении данных.")
+        return redirect("files:append")
+
+    proc.apply_operation(request, merged, "append", {}, meta)
+    messages.success(request, _success_message("append", meta))
+    return redirect("files:processor")
+
+
+@login_required
+@rate_limit("export", methods=("GET",))
 def download(request):
     if not proc.has_session(request):
         messages.error(request, "Нет данных для скачивания.")
@@ -365,11 +515,31 @@ def download(request):
 
 
 @login_required
+@rate_limit("merge", lambda request: reverse("files:merge"))
 def merge(request):
     if request.method == "POST":
         request_files = request.FILES.getlist("files")
         if not request_files:
             messages.error(request, "Выберите файлы для объединения.")
+            return redirect("files:merge")
+
+        # Лимиты до начала тяжёлой обработки.
+        if len(request_files) > settings.MAX_MERGE_FILES:
+            messages.error(
+                request,
+                f"Слишком много файлов: {len(request_files)}. "
+                f"Максимум — {settings.MAX_MERGE_FILES}.",
+            )
+            return redirect("files:merge")
+
+        total_size = sum(getattr(rf, "size", 0) for rf in request_files)
+        if total_size > settings.MAX_TOTAL_MERGE_SIZE:
+            messages.error(
+                request,
+                f"Суммарный размер файлов слишком большой: "
+                f"{total_size // (1024 * 1024)} МБ. "
+                f"Максимум — {settings.MAX_TOTAL_MERGE_SIZE // (1024 * 1024)} МБ.",
+            )
             return redirect("files:merge")
 
         tables = []
@@ -390,8 +560,6 @@ def merge(request):
                 try:
                     df = read_table(uploaded.file.path, file_type)
                 except TableReadError:
-                    for u in uploaded_list:
-                        u.delete()
                     raise
                 tables.append((df, safe_name))
 
@@ -400,9 +568,20 @@ def merge(request):
             for df, name in tables[1:]:
                 current = [str(c) for c in df.columns]
                 if current != reference:
-                    for u in uploaded_list:
-                        u.delete()
                     raise MergeStructureError("Файлы имеют разную структуру: столбцы не совпадают.")
+
+            # Суммарные ограничения на результирующую таблицу.
+            merged_rows = sum(len(df) for df, _ in tables)
+            merged_cols = len(reference)
+            if merged_rows > settings.DATA_MAX_ROWS:
+                raise MergeStructureError(
+                    f"Суммарно {merged_rows} строк — больше допустимых {settings.DATA_MAX_ROWS}."
+                )
+            if merged_rows * merged_cols > settings.DATA_MAX_CELLS:
+                raise MergeStructureError(
+                    f"Слишком много ячеек в объединённой таблице "
+                    f"({merged_rows * merged_cols} > {settings.DATA_MAX_CELLS})."
+                )
 
             merged_df = tables[0][0].copy()
             for df, _ in tables[1:]:
@@ -432,20 +611,25 @@ def merge(request):
                 f"Объединено файлов: {len(tables)}. Итого строк: {total_rows}.",
             )
             return redirect("files:processor")
-        except FileValidationError as exc:
-            messages.error(request, str(exc))
-            return redirect("files:merge")
-        except TableReadError as exc:
-            messages.error(request, str(exc))
-            return redirect("files:merge")
-        except MergeStructureError as exc:
+        except (FileValidationError, TableReadError, MergeStructureError) as exc:
+            _rollback_uploads(uploaded_list)
             messages.error(request, str(exc))
             return redirect("files:merge")
         except Exception:
+            _rollback_uploads(uploaded_list)
             messages.error(request, "Произошла ошибка при объединении файлов.")
             return redirect("files:merge")
 
     return render(request, "files/merge.html", {"section": "files"})
+
+
+def _rollback_uploads(uploaded_list):
+    """Удаляет все временно созданные UploadedFile при ошибке merge."""
+    for uploaded in uploaded_list:
+        try:
+            uploaded.delete()
+        except Exception:
+            pass
 
 
 def _concat_preserving(left, right):

@@ -2,17 +2,24 @@ import os
 import sys
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.environ.get(
-    "DJANGO_SECRET_KEY",
-    "django-insecure-office-data-studio-dev-only-change-me",
-)
-DEBUG = os.environ.get("DJANGO_DEBUG", "True").lower() == "true"
+DEBUG = os.environ.get("DJANGO_DEBUG", "False").lower() == "true"
+
+# SECRET_KEY берём только из environment. Без него приложение не стартует.
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
+if not SECRET_KEY:
+    raise ImproperlyConfigured(
+        "DJANGO_SECRET_KEY не задан. Задайте его в переменной окружения "
+        "или в файле .env (например: DJANGO_SECRET_KEY=<случайная строка>)."
+    )
+
 ALLOWED_HOSTS = [
     host.strip()
     for host in os.environ.get(
@@ -33,6 +40,7 @@ INSTALLED_APPS = [
     "files",
     "operations",
     "workflows",
+    "quality",
 ]
 
 MIDDLEWARE = [
@@ -112,10 +120,17 @@ AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
 ]
 
-SESSION_COOKIE_SECURE = not DEBUG
-CSRF_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_SECURE = os.environ.get("DJANGO_SESSION_COOKIE_SECURE", "false").lower() == "true"
+CSRF_COOKIE_SECURE = os.environ.get("DJANGO_CSRF_COOKIE_SECURE", "false").lower() == "true"
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
+SECURE_REFERRER_POLICY = os.environ.get("DJANGO_SECURE_REFERRER_POLICY", "same-origin")
+SECURE_SSL_REDIRECT = os.environ.get("DJANGO_SECURE_SSL_REDIRECT", "false").lower() == "true"
+SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_SECURE_HSTS_SECONDS", "0"))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = os.environ.get(
+    "DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS", "false"
+).lower() == "true"
+SECURE_HSTS_PRELOAD = os.environ.get("DJANGO_SECURE_HSTS_PRELOAD", "false").lower() == "true"
 
 # -- Лимиты на загружаемые файлы --
 # Максимальный размер исходного файла (XLSX/CSV), конфигурируемый через env.
@@ -123,7 +138,26 @@ DATA_MAX_FILE_SIZE = int(os.environ.get("DATA_MAX_FILE_SIZE", 20)) * 1024 * 1024
 # Ограничение Django на размер multipart-тела согласовано с лимитом файла.
 DATA_UPLOAD_MAX_MEMORY_SIZE = DATA_MAX_FILE_SIZE
 FILE_UPLOAD_MAX_MEMORY_SIZE = DATA_MAX_FILE_SIZE
+# Ограничения на таблицу (защита от слишком тяжёлых файлов).
+DATA_MAX_ROWS = int(os.environ.get("DATA_MAX_ROWS", 100000))
+DATA_MAX_COLUMNS = int(os.environ.get("DATA_MAX_COLUMNS", 200))
+DATA_MAX_CELLS = int(os.environ.get("DATA_MAX_CELLS", 5000000))
+# Merge: максимум файлов и суммарный размер до обработки.
+MAX_MERGE_FILES = int(os.environ.get("MAX_MERGE_FILES", 10))
+MAX_TOTAL_MERGE_SIZE = int(os.environ.get("MAX_TOTAL_MERGE_SIZE", 100)) * 1024 * 1024
 # Сколько строк показывать в preview таблицы.
 PREVIEW_ROWS = 50
 # Максимальное число версий в истории отмены (undo/redo).
 MAX_UNDO_STEPS = 25
+# Время жизни processing-сессий (в часах) для cleanup_processing.
+PROCESSING_RETENTION_HOURS = int(os.environ.get("PROCESSING_RETENTION_HOURS", 24))
+# Экранирование формул при экспорте CSV (=, +, -, @ в начале ячейки).
+SAFE_CSV_EXPORT = os.environ.get("SAFE_CSV_EXPORT", "true").lower() == "true"
+
+# -- Rate limiting (на пользователя, за минуту) --
+RATE_LIMIT_UPLOAD_PER_MINUTE = int(os.environ.get("RATE_LIMIT_UPLOAD_PER_MINUTE", 10))
+RATE_LIMIT_MERGE_PER_MINUTE = int(os.environ.get("RATE_LIMIT_MERGE_PER_MINUTE", 5))
+RATE_LIMIT_WORKFLOW_RUN_PER_MINUTE = int(
+    os.environ.get("RATE_LIMIT_WORKFLOW_RUN_PER_MINUTE", 20)
+)
+RATE_LIMIT_EXPORT_PER_MINUTE = int(os.environ.get("RATE_LIMIT_EXPORT_PER_MINUTE", 30))
