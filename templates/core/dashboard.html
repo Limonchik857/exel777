@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="page page--wide">
+    <div class="page-head">
+        <div>
+            <h1>Сводка</h1>
+            <p class="page-desc">Office Data Studio — загрузите таблицу, выполните операции и получите готовый файл.</p>
+        </div>
+        <div class="panel-actions">
+            <a href="{% url 'files:upload' %}" class="btn btn--primary">＋ Новая обработка</a>
+            <a href="{% url 'files:merge' %}" class="btn">⇄ Объединить файлы</a>
+        </div>
+    </div>
+
+    <div class="stats">
+        <div class="stat-card">
+            <span class="stat-label">Обработано файлов</span>
+            <span class="stat-value stat-value--accent">{{ files_count }}</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-label">Workflow создано</span>
+            <span class="stat-value stat-value--violet">{{ workflows_count }}</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-label">Запусков workflow</span>
+            <span class="stat-value stat-value--success">{{ runs_count }}</span>
+        </div>
+    </div>
+
+    <div class="grid" style="grid-template-columns: 1fr 1fr;">
+        <div class="panel">
+            <div class="panel-head">
+                <span class="panel-title">Последние обработки</span>
+            </div>
+            {% if last_executions %}
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Workflow</th>
+                                <th>Статус</th>
+                                <th>Когда</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for run in last_executions %}
+                            <tr>
+                                <td>
+                                    <a href="{% url 'workflows:detail' run.workflow_id %}">{{ run.workflow.name }}</a>
+                                </td>
+                                <td>
+                                    <span class="badge badge--{{ run.status }}">{{ run.get_status_display }}</span>
+                                </td>
+                                <td class="muted">{{ run.created_at|date:"d.m.Y H:i" }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="empty">
+                    <div class="empty__icon">▦</div>
+                    <div class="empty__title">Запусков пока нет</div>
+                    <div class="empty__text">Создайте workflow и запустите его на новом файле.</div>
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="panel">
+            <div class="panel-head">
+                <span class="panel-title">Последние workflow</span>
+            </div>
+            {% if last_workflows %}
+                <ul class="op-history">
+                    {% for wf in last_workflows %}
+                    <li class="op-history__item">
+                        <span class="op-history__num">▸</span>
+                        <a href="{% url 'workflows:detail' wf.id %}" class="op-history__text">{{ wf.name }}</a>
+                        <span class="op-history__meta">{{ wf.operations.count }} оп.</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <div class="empty">
+                    <div class="empty__icon">⚙</div>
+                    <div class="empty__title">Workflow ещё нет</div>
+                    <div class="empty__text">Сохраните последовательность операций во время обработки файла.</div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

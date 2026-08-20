@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Сохранить workflow{% endblock %}
+
+{% block content %}
+<div class="page page--medium">
+    <a href="{% url 'files:processor' %}" class="back">← К обработке</a>
+    <div class="page-head">
+        <div>
+            <h1>Сохранить workflow</h1>
+            <p class="page-desc">Сохранённую последовательность операций можно будет запускать на новых файлах.</p>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-head">
+            <span class="panel-title">Шаги ({{ steps|length }})</span>
+        </div>
+        <ul class="op-history">
+            {% for step in steps %}
+            <li class="op-history__item">
+                <span class="op-history__num">{{ forloop.counter }}</span>
+                <span class="op-history__text">{{ step.label }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <div class="panel">
+        <div class="panel-head">
+            <span class="panel-title">Название workflow</span>
+        </div>
+        <form method="post" class="form">
+            {% csrf_token %}
+            {% for field in form %}
+                <div class="form-group">
+                    <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {{ field.errors }}
+                </div>
+            {% endfor %}
+            <div class="form-actions">
+                <button type="submit" class="btn btn--primary">Сохранить workflow</button>
+                <a href="{% url 'files:processor' %}" class="btn btn--ghost">Отмена</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

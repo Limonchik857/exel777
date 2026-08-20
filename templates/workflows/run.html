@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}Запуск: {{ workflow.name }}{% endblock %}
+
+{% block content %}
+<div class="page page--narrow">
+    <a href="{% url 'workflows:detail' workflow.pk %}" class="back">← {{ workflow.name }}</a>
+    <div class="page-head">
+        <div>
+            <h1>Запустить workflow</h1>
+            <p class="page-desc">Загрузите новый файл — все операции workflow будут применены автоматически.</p>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-head">
+            <span class="panel-title">{{ workflow.name }}</span>
+        </div>
+        <form method="post" enctype="multipart/form-data" class="form">
+            {% csrf_token %}
+            <div class="dropzone" id="dropzone">
+                <div class="dropzone__icon">▶</div>
+                <div class="dropzone__title">Перетащите Excel или CSV сюда</div>
+                <div class="dropzone__hint">или нажмите, чтобы выбрать файл</div>
+                <input type="file" name="file" id="file-input" accept=".xlsx,.csv">
+            </div>
+            <div class="form-actions" style="justify-content: center;">
+                <button type="submit" class="btn btn--primary">Запустить</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    (function () {
+        var zone = document.getElementById("dropzone");
+        var input = document.getElementById("file-input");
+        if (!zone || !input) return;
+        ["dragenter", "dragover"].forEach(function (ev) {
+            zone.addEventListener(ev, function (e) {
+                e.preventDefault();
+                zone.classList.add("dragover");
+            });
+        });
+        ["dragleave", "drop"].forEach(function (ev) {
+            zone.addEventListener(ev, function (e) {
+                e.preventDefault();
+                zone.classList.remove("dragover");
+            });
+        });
+        zone.addEventListener("drop", function (e) {
+            if (e.dataTransfer.files.length) {
+                input.files = e.dataTransfer.files;
+            }
+        });
+    })();
+</script>
+{% endblock %}

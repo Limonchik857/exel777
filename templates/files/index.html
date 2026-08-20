@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}Файлы{% endblock %}
+
+{% block content %}
+<div class="page page--wide">
+    <div class="page-head">
+        <div>
+            <h1>Файлы</h1>
+            <p class="page-desc">Загруженные источники и результаты обработки.</p>
+        </div>
+        <div class="panel-actions">
+            <a href="{% url 'files:upload' %}" class="btn btn--primary">＋ Загрузить файл</a>
+            <a href="{% url 'files:merge' %}" class="btn">⇄ Объединить</a>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-head">
+            <span class="panel-title">Загруженные файлы</span>
+        </div>
+        {% if uploaded %}
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Имя</th>
+                        <th>Тип</th>
+                        <th>Строки</th>
+                        <th>Столбцы</th>
+                        <th>Размер</th>
+                        <th>Когда</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for f in uploaded %}
+                    <tr>
+                        <td><a href="{% url 'core:download_source' f.pk %}">{{ f.original_name }}</a></td>
+                        <td><span class="tag tag--accent mono">{{ f.file_type|upper }}</span></td>
+                        <td class="mono">{{ f.rows_count|default:"—" }}</td>
+                        <td class="mono">{{ f.columns_count|default:"—" }}</td>
+                        <td class="mono">{{ f.size|filesizeformat }}</td>
+                        <td class="muted">{{ f.created_at|date:"d.m.Y H:i" }}</td>
+                        <td>
+                            <a href="{% url 'core:download_source' f.pk %}" class="btn btn-sm">Скачать</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty">
+            <div class="empty__icon">▦</div>
+            <div class="empty__title">Файлы ещё не загружены</div>
+            <div class="empty__text">Загрузите Excel или CSV, чтобы начать обработку.</div>
+            <a href="{% url 'files:upload' %}" class="btn btn--primary">Загрузить файл</a>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="panel">
+        <div class="panel-head">
+            <span class="panel-title">Результаты обработки</span>
+        </div>
+        {% if processed %}
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Имя</th>
+                        <th>Источник</th>
+                        <th>Строк</th>
+                        <th>Операций</th>
+                        <th>Когда</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for f in processed %}
+                    <tr>
+                        <td><a href="{% url 'core:download_processed' f.pk %}">{{ f.original_name }}</a></td>
+                        <td class="muted">{{ f.source_name }}</td>
+                        <td class="mono">{{ f.rows_after|default:"—" }}</td>
+                        <td class="mono">{{ f.operations|length }}</td>
+                        <td class="muted">{{ f.created_at|date:"d.m.Y H:i" }}</td>
+                        <td>
+                            <a href="{% url 'core:download_processed' f.pk %}" class="btn btn-sm btn--success">Скачать</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty">
+            <div class="empty__icon">⚙</div>
+            <div class="empty__title">Результатов пока нет</div>
+            <div class="empty__text">Обработайте файл и скачайте результат.</div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

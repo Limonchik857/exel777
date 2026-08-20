@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Объединение файлов{% endblock %}
+
+{% block content %}
+<div class="page page--narrow">
+    <div class="page-head">
+        <div>
+            <h1>Объединить файлы</h1>
+            <p class="page-desc">Загрузите несколько файлов с одинаковой структурой — их строки будут объединены в одну таблицу.</p>
+        </div>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" id="merge-form" class="form">
+        {% csrf_token %}
+        <div class="dropzone" id="dropzone">
+            <div class="dropzone__icon">⇄</div>
+            <div class="dropzone__title">Перетащите несколько Excel или CSV сюда</div>
+            <div class="dropzone__hint">или нажмите, чтобы выбрать файлы (можно несколько)</div>
+            <input type="file" name="files" id="file-input" accept=".xlsx,.csv" multiple>
+        </div>
+        <div class="form-actions" style="justify-content: center;">
+            <button type="submit" class="btn btn--primary">Объединить</button>
+        </div>
+        <div class="form-hint" style="text-align: center;">Столбцы всех файлов должны совпадать.</div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    (function () {
+        var zone = document.getElementById("dropzone");
+        var input = document.getElementById("file-input");
+        if (!zone || !input) return;
+        ["dragenter", "dragover"].forEach(function (ev) {
+            zone.addEventListener(ev, function (e) {
+                e.preventDefault();
+                zone.classList.add("dragover");
+            });
+        });
+        ["dragleave", "drop"].forEach(function (ev) {
+            zone.addEventListener(ev, function (e) {
+                e.preventDefault();
+                zone.classList.remove("dragover");
+            });
+        });
+        zone.addEventListener("drop", function (e) {
+            if (e.dataTransfer.files.length) {
+                input.files = e.dataTransfer.files;
+            }
+        });
+    })();
+</script>
+{% endblock %}

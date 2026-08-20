@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% load core_tags %}
+
+{% block title %}{{ workflow.name }}{% endblock %}
+
+{% block content %}
+<div class="page page--wide">
+    <a href="{% url 'workflows:index' %}" class="back">← Workflow</a>
+    <div class="page-head">
+        <div>
+            <h1>{{ workflow.name }}</h1>
+            {% if workflow.description %}
+                <p class="page-desc">{{ workflow.description }}</p>
+            {% endif %}
+        </div>
+        <div class="panel-actions">
+            <a href="{% url 'workflows:run' workflow.pk %}" class="btn btn--primary">▶ Запустить на новом файле</a>
+            <form method="post" action="{% url 'workflows:delete' workflow.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn--danger">Удалить</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="processor">
+        <aside class="processor-side sticky-side">
+            <div class="panel">
+                <div class="panel-head">
+                    <span class="panel-title">Операции ({{ operations|length }})</span>
+                </div>
+                <ul class="op-history">
+                    {% for op in operations %}
+                    <li class="op-history__item">
+                        <span class="op-history__num">{{ forloop.counter }}</span>
+                        <span class="op-history__text">{{ icons|get_item:op.operation_type }} {{ op.operation_type }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            <div class="panel">
+                <div class="panel-head">
+                    <span class="panel-title">Правила</span>
+                </div>
+                <p class="page-sub">
+                    При запуске workflow каждая операция применяется к новому файлу по очереди.
+                    Если в файле нет нужных столбцов — выполнение прервётся с понятной ошибкой.
+                </p>
+            </div>
+        </aside>
+
+        <div>
+            <div class="panel">
+                <div class="panel-head">
+                    <span class="panel-title">Шаги workflow</span>
+                </div>
+                {% if operations %}
+                <ul class="op-history">
+                    {% for step in op_steps %}
+                    <li class="op-history__item">
+                        <span class="op-history__num">{{ forloop.counter }}</span>
+                        <span class="op-history__text">{{ icons|get_item:step.op.operation_type }} {{ step.label }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="page-sub">Операций нет.</p>
+                {% endif %}
+            </div>
+
+            <div class="panel">
+                <div class="panel-head">
+                    <span class="panel-title">Запуски</span>
+                </div>
+                {% if executions %}
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Файл</th>
+                                <th>Статус</th>
+                                <th>Строк</th>
+                                <th>Когда</th>
+                                <th>Результат</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for run in executions %}
+                            <tr>
+                                <td class="muted">{{ run.input_file.original_name|default:"—" }}</td>
+                                <td><span class="badge badge--{{ run.status }}">{{ run.get_status_display }}</span></td>
+                                <td class="mono">{{ run.rows_before|default:"—" }} → {{ run.rows_after|default:"—" }}</td>
+                                <td class="muted">{{ run.created_at|date:"d.m.Y H:i" }}</td>
+                                <td>
+                                    {% if run.output_file %}
+                                        <a href="{% url 'core:download_processed' run.output_file.pk %}" class="btn btn-sm btn--success">Скачать</a>
+                                    {% elif run.error %}
+                                        <span class="muted" title="{{ run.error }}">{{ run.error|truncatechars:40 }}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="empty">
+                    <div class="empty__icon">▶</div>
+                    <div class="empty__title">Запусков не было</div>
+                    <div class="empty__text">Запустите workflow на новом файле.</div>
+                    <a href="{% url 'workflows:run' workflow.pk %}" class="btn btn--primary">Запустить</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

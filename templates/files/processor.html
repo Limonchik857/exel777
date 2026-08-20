@@ -1,0 +1,316 @@
+{% extends "base.html" %}
+{% load core_tags %}
+
+{% block title %}Обработка: {{ source_name }}{% endblock %}
+
+{% block content %}
+<div class="page page--wide">
+    <div class="page-head">
+        <div>
+            <h1>Обработка данных</h1>
+            <p class="page-desc">
+                Файл: <span class="mono">{{ source_name }}</span> ·
+                {{ file_size_display }} ·
+                {{ total_rows }} строк ·
+                {{ columns|length }} столбцов
+            </p>
+        </div>
+        <div class="panel-actions">
+            <a href="{% url 'files:download' %}?fmt=xlsx" class="btn btn--success">Скачать XLSX</a>
+            <a href="{% url 'files:download' %}?fmt=csv" class="btn">Скачать CSV</a>
+            <a href="{% url 'files:upload' %}" class="btn btn--ghost">Новый файл</a>
+        </div>
+    </div>
+
+    <div class="processor">
+        <!-- Левая колонка: состояние -->
+        <aside class="processor-side sticky-side">
+            <div class="panel">
+                <div class="panel-head">
+                    <span class="panel-title">История операций</span>
+                </div>
+                {% if history %}
+                    <ul class="op-history">
+                        {% for item in history %}
+                        <li class="op-history__item">
+                            <span class="op-history__num">{{ forloop.counter }}</span>
+                            <span class="op-history__text">{{ item.label }}</span>
+                            {% if item.meta.removed is not None %}
+                            <span class="op-history__meta">−{{ item.meta.removed }}</span>
+                            {% endif %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="page-sub">Операции ещё не выполнялись.</p>
+                {% endif %}
+            </div>
+
+            <div class="panel">
+                <div class="panel-head">
+                    <span class="panel-title">Столбцы</span>
+                </div>
+                <div class="form-group">
+                    {% for col in columns %}
+                        <span class="tag tag--{% if column_types|get_item:col == 'numeric' %}accent{% else %}violet{% endif %} mono">{{ col }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-head">
+                    <span class="panel-title">Workflow</span>
+                </div>
+                {% if history %}
+                    <p class="page-sub">Сохраните последовательность операций и запускайте её на новых файлах.</p>
+                    <a href="{% url 'workflows:create' %}" class="btn btn--primary btn-block">Сохранить как workflow</a>
+                {% else %}
+                    <p class="page-sub">Выполните хотя бы одну операцию, чтобы сохранить workflow.</p>
+                    <button class="btn btn-block" disabled>Сохранить как workflow</button>
+                {% endif %}
+            </div>
+        </aside>
+
+        <!-- Правая колонка: операции и preview -->
+        <div>
+            <div class="panel">
+                <div class="panel-head">
+                    <span class="panel-title">Операции</span>
+                    <div class="panel-actions">
+                        <form method="post" action="{% url 'files:undo' %}">{% csrf_token %}
+                            <button type="submit" class="btn btn-sm" {% if not can_undo %}disabled{% endif %}>↩ Отменить</button>
+                        </form>
+                        <form method="post" action="{% url 'files:redo' %}">{% csrf_token %}
+                            <button type="submit" class="btn btn-sm" {% if not can_redo %}disabled{% endif %}>↪ Повторить</button>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="op-grid" style="margin-bottom: 18px;">
+                    {% for op in op_list %}
+                    <a href="{% url 'files:processor' %}?op={{ op.key }}"
+                       class="op-tile {% if active_op == op.key %}is-active{% endif %}">
+                        <span class="op-tile__icon">{{ op.icon }}</span>
+                        <span class="op-tile__name">{{ op.label }}</span>
+                    </a>
+                    {% endfor %}
+                </div>
+
+                {% if active_op == "remove_duplicates" %}
+                <form method="post" action="{% url 'files:apply' %}" class="form">
+                    {% csrf_token %}
+                    <input type="hidden" name="op" value="remove_duplicates">
+                    <div class="form-group">
+                        <label class="form-label">По каким столбцам искать дубликаты?</label>
+                        <div class="form-hint">Выберите «Все столбцы», один или несколько.</div>
+                        <div class="form-row">
+                            <label class="check">
+                                <input type="radio" name="scope" value="all" checked>
+                                <span class="check__box">✓</span>
+                                Все столбцы
+                            </label>
+                            <label class="check">
+                                <input type="radio" name="scope" value="selected">
+                                <span class="check__box">✓</span>
+                                Выбранные
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-pick">
+                        {% for col in columns %}
+                        <label>
+                            <input type="checkbox" name="columns" value="{{ col }}">
+                            <span class="mono">{{ col }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn--primary">Удалить дубликаты</button>
+                    </div>
+                </form>
+                {% elif active_op == "drop_columns" %}
+                <form method="post" action="{% url 'files:apply' %}" class="form">
+                    {% csrf_token %}
+                    <input type="hidden" name="op" value="drop_columns">
+                    <div class="form-group">
+                        <label class="form-label">Выберите столбцы для удаления</label>
+                        <div class="col-pick">
+                            {% for col in columns %}
+                            <label>
+                                <input type="checkbox" name="columns" value="{{ col }}">
+                                <span class="mono">{{ col }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn--danger">Удалить столбцы</button>
+                    </div>
+                </form>
+                {% elif active_op == "filter" %}
+                <form method="post" action="{% url 'files:apply' %}" class="form">
+                    {% csrf_token %}
+                    <input type="hidden" name="op" value="filter">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="f-col">Столбец</label>
+                            <select name="column" id="f-col">
+                                {% for col in columns %}
+                                <option value="{{ col }}">{{ col }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="f-op">Условие</label>
+                            <select name="operator" id="f-op">
+                                {% for key, label in filter_operators.items %}
+                                <option value="{{ key }}">{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="f-val">Значение</label>
+                        <input type="text" name="value" id="f-val" placeholder="Например: 100000">
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn--primary">Применить фильтр</button>
+                    </div>
+                </form>
+                {% elif active_op == "sort" %}
+                <form method="post" action="{% url 'files:apply' %}" class="form">
+                    {% csrf_token %}
+                    <input type="hidden" name="op" value="sort">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="s-col">Столбец</label>
+                            <select name="column" id="s-col">
+                                {% for col in columns %}
+                                <option value="{{ col }}">{{ col }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="s-order">Порядок</label>
+                            <select name="order" id="s-order">
+                                <option value="asc">По возрастанию</option>
+                                <option value="desc">По убыванию</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn--primary">Сортировать</button>
+                    </div>
+                </form>
+                {% elif active_op == "find_replace" %}
+                <form method="post" action="{% url 'files:apply' %}" class="form">
+                    {% csrf_token %}
+                    <input type="hidden" name="op" value="find_replace">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="fr-find">Найти</label>
+                            <input type="text" name="find" id="fr-find" placeholder="ООО «Ромашка»">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="fr-rep">Заменить</label>
+                            <input type="text" name="replace" id="fr-rep" placeholder="Ромашка">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Где искать?</label>
+                        <div class="form-row">
+                            <label class="check">
+                                <input type="radio" name="scope" value="all" checked>
+                                <span class="check__box">✓</span>
+                                Во всей таблице
+                            </label>
+                            <label class="check">
+                                <input type="radio" name="scope" value="column">
+                                <span class="check__box">✓</span>
+                                В столбце
+                            </label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="fr-col">Столбец</label>
+                        <select name="column" id="fr-col">
+                            {% for col in columns %}
+                            <option value="{{ col }}">{{ col }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn--primary">Заменить</button>
+                    </div>
+                </form>
+                {% elif active_op == "remove_empty_rows" %}
+                <form method="post" action="{% url 'files:apply' %}" class="form">
+                    {% csrf_token %}
+                    <input type="hidden" name="op" value="remove_empty_rows">
+                    <div class="form-group">
+                        <div class="form-hint">Удаляются строки, в которых отсутствуют все значения.</div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn--primary">Удалить пустые строки</button>
+                    </div>
+                </form>
+                {% elif active_op == "normalize_phone" %}
+                <form method="post" action="{% url 'files:apply' %}" class="form">
+                    {% csrf_token %}
+                    <input type="hidden" name="op" value="normalize_phone">
+                    <div class="form-group">
+                        <label class="form-label" for="np-col">Столбец с телефонами</label>
+                        <select name="column" id="np-col">
+                            {% for col in columns %}
+                            <option value="{{ col }}">{{ col }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-hint">Телефоны будут приведены к виду +7XXXXXXXXXX.</div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn--primary">Нормализовать</button>
+                    </div>
+                </form>
+                {% else %}
+                <p class="page-sub">Выберите операцию выше, чтобы открыть её настройки.</p>
+                {% endif %}
+            </div>
+
+            <div class="panel">
+                <div class="panel-head">
+                    <span class="panel-title">Preview (первые {{ preview_rows }} строк из {{ total_rows }})</span>
+                </div>
+                {% if preview_df %}
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                {% for col in columns %}
+                                <th>{{ col }}</th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in preview_df %}
+                            <tr>
+                                {% for col in columns %}
+                                    {% with value=row|get_item:col %}
+                                    <td class="{% if value == '' %}cell-empty{% endif %}">{{ value }}</td>
+                                    {% endwith %}
+                                {% endfor %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="empty">
+                    <div class="empty__icon">▦</div>
+                    <div class="empty__title">Таблица пуста</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

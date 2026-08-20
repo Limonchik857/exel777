@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}Workflow{% endblock %}
+
+{% block content %}
+<div class="page page--wide">
+    <div class="page-head">
+        <div>
+            <h1>Мои workflow</h1>
+            <p class="page-desc">Сохранённые последовательности операций. Запустите workflow на новом файле — и он будет обработан автоматически.</p>
+        </div>
+    </div>
+
+    {% if workflows %}
+    <div class="grid">
+        {% for wf in workflows %}
+        <div class="tool-card">
+            <div class="tool-card__top">
+                <span class="tool-card__icon" aria-hidden="true">⚙</span>
+                <div class="tool-card__head">
+                    <h2 class="tool-card__title">
+                        <a href="{% url 'workflows:detail' wf.pk %}">{{ wf.name }}</a>
+                    </h2>
+                    {% if wf.description %}
+                        <p class="tool-card__subtitle">{{ wf.description }}</p>
+                    {% endif %}
+                </div>
+            </div>
+            <p class="tool-card__features">
+                {{ wf.operations.count }} операций · запусков: {{ wf.runs_count }}
+            </p>
+            <div class="tool-card__actions">
+                <a href="{% url 'workflows:run' wf.pk %}" class="btn btn--primary">Запустить</a>
+                <a href="{% url 'workflows:detail' wf.pk %}" class="btn btn--ghost">Открыть</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty">
+        <div class="empty__icon">⚙</div>
+        <div class="empty__title">Workflow ещё нет</div>
+        <div class="empty__text">Загрузите файл, выполните операции и нажмите «Сохранить как workflow».</div>
+        <a href="{% url 'files:upload' %}" class="btn btn--primary">Новая обработка</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

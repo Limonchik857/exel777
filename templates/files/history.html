@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}История{% endblock %}
+
+{% block content %}
+<div class="page page--wide">
+    <div class="page-head">
+        <div>
+            <h1>История обработки</h1>
+            <p class="page-desc">Сохранённые результаты обработки и их операции.</p>
+        </div>
+    </div>
+
+    {% if processed %}
+        {% for item in processed %}
+        <div class="panel">
+            <div class="panel-head">
+                <span class="panel-title mono">{{ item.original_name }}</span>
+                <div class="panel-actions">
+                    <span class="tag tag--accent mono">{{ item.file_type|upper }}</span>
+                    <span class="tag mono">{{ item.rows_before|default:"—" }} → {{ item.rows_after|default:"—" }}</span>
+                    <a href="{% url 'core:download_processed' item.pk %}" class="btn btn-sm btn--success">Скачать</a>
+                </div>
+            </div>
+            {% if item.operations %}
+            <ul class="op-history">
+                {% for op in item.operations %}
+                <li class="op-history__item">
+                    <span class="op-history__num">{{ forloop.counter }}</span>
+                    <span class="op-history__text">{{ op.label }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="page-sub">Операции не записаны.</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    {% else %}
+    <div class="empty">
+        <div class="empty__icon">◷</div>
+        <div class="empty__title">История пуста</div>
+        <div class="empty__text">Обработайте файл и скачайте результат — он появится здесь.</div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}Выход{% endblock %}
+
+{% block content %}
+<div class="auth">
+    <div class="auth-card">
+        <h1 class="auth-card__title">Выйти из аккаунта?</h1>
+        <p class="auth-card__sub">Вы сможете войти снова в любой момент</p>
+        <form method="post" class="form">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--danger btn-block">Выйти</button>
+            <a href="{% url 'core:dashboard' %}" class="btn btn--ghost btn-block">Отмена</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

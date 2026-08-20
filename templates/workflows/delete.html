@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}Удалить workflow{% endblock %}
+
+{% block content %}
+<div class="auth">
+    <div class="auth-card">
+        <h1 class="auth-card__title">Удалить workflow?</h1>
+        <p class="auth-card__sub">Workflow «{{ workflow.name }}» будет удалён безвозвратно. Сохранённые результаты останутся.</p>
+        <form method="post" class="form">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--danger btn-block">Удалить</button>
+            <a href="{% url 'workflows:detail' workflow.pk %}" class="btn btn--ghost btn-block">Отмена</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

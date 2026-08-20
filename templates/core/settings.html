@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Настройки{% endblock %}
+
+{% block content %}
+<div class="page page--medium">
+    <div class="page-head">
+        <div>
+            <h1>Настройки</h1>
+            <p class="page-desc">Профиль пользователя Office Data Studio.</p>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-head">
+            <span class="panel-title">Профиль</span>
+        </div>
+        <form method="post" class="form">
+            {% csrf_token %}
+            <div class="form-row">
+                {% for field in form %}
+                    <div class="form-group">
+                        <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {{ field }}
+                        {{ field.errors }}
+                    </div>
+                {% endfor %}
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn--primary">Сохранить</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="panel">
+        <div class="panel-head">
+            <span class="panel-title">Аккаунт</span>
+        </div>
+        <div class="meta-list" style="margin-bottom: 0;">
+            <div class="meta-item">
+                <span class="meta-item__label">Логин</span>
+                <span class="meta-item__value">{{ user.username }}</span>
+            </div>
+            <div class="meta-item">
+                <span class="meta-item__label">Электронная почта</span>
+                <span class="meta-item__value">{{ user.email }}</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-head">
+            <span class="panel-title">Лимиты</span>
+        </div>
+        <p class="page-sub">Максимальный размер исходного файла: <span class="mono">{{ max_file_size_mb }} МБ</span></p>
+    </div>
+</div>
+{% endblock %}

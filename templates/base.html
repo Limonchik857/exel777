@@ -1,0 +1,71 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#05070c">
+    <title>{% block title %}office_data_studio{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+<header class="topbar">
+    <div class="container topbar-inner">
+        <a href="{% url 'core:dashboard' %}" class="brand">
+            <span class="brand-mark">▦</span>
+            <span>office data studio</span>
+        </a>
+
+        {% if user.is_authenticated %}
+        <nav class="nav">
+            <a href="{% url 'core:dashboard' %}" title="Сводка по обработке"
+               class="nav-link {% if section == 'dashboard' %}active{% endif %}">Dashboard</a>
+            <a href="{% url 'files:index' %}" title="Загруженные и обработанные таблицы"
+               class="nav-link {% if section == 'files' %}active{% endif %}">Файлы</a>
+            <a href="{% url 'workflows:index' %}" title="Сохранённые последовательности операций"
+               class="nav-link {% if section == 'workflows' %}active{% endif %}">Workflow</a>
+            <a href="{% url 'files:history' %}" title="История обработки"
+               class="nav-link {% if section == 'history' %}active{% endif %}">История</a>
+            <a href="{% url 'core:settings' %}" title="Настройки"
+               class="nav-link {% if section == 'settings' %}active{% endif %}">Настройки</a>
+        </nav>
+        <div class="topbar-user">
+            <span class="user-chip">{{ user.username }}</span>
+            <a href="{% url 'core:logout' %}" class="btn btn-ghost btn-sm">Выйти</a>
+        </div>
+        {% else %}
+        <nav class="nav">
+            <a href="{% url 'core:login' %}" class="btn btn-primary btn-sm">Войти</a>
+        </nav>
+        {% endif %}
+    </div>
+</header>
+
+{% if messages %}
+<div class="container">
+    <ul class="messages">
+        {% for message in messages %}
+            <li class="messages__item messages__item--{{ message.tags }}">{{ message }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+<main class="container main">
+    {% block content %}{% endblock %}
+</main>
+
+<footer class="footer">
+    <div class="container footer-inner">
+        <span>office data studio — обработка офисных таблиц.</span>
+        <span class="mono">excel · csv · automation</span>
+    </div>
+</footer>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>
