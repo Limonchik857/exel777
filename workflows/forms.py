@@ -68,17 +68,28 @@ class ScheduleForm(forms.ModelForm):
 
     class Meta:
         model = Workflow
-        fields = ("schedule_type", "schedule_time", "schedule_days", "timezone", "schedule_active")
+        fields = (
+            "schedule_type",
+            "schedule_time",
+            "schedule_days",
+            "timezone",
+            "email_recipient",
+            "schedule_active",
+        )
         labels = {
             "schedule_type": "Периодичность",
             "schedule_time": "Время запуска",
             "timezone": "Часовой пояс",
+            "email_recipient": "Email для результата",
             "schedule_active": "Расписание активно",
         }
         widgets = {
             "schedule_type": forms.Select(),
             "schedule_time": forms.TimeInput(attrs={"type": "time"}),
             "timezone": forms.Select(choices=TIMEZONE_CHOICES),
+            "email_recipient": forms.EmailInput(
+                attrs={"placeholder": "result@example.com (необязательно)"}
+            ),
             "schedule_active": forms.CheckboxInput(),
         }
 

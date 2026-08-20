@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% load core_tags %}
+
+{% block title %}Отчёт{% endblock %}
+
+{% block content %}
+<div class="page page--wide">
+    <div class="page-head">
+        <div>
+            <h1>Отчёт</h1>
+            <p class="page-desc">
+                Файл: <span class="mono">{{ source_name }}</span> · {{ total_rows }} строк ·
+                {{ columns|length }} столбцов
+            </p>
+        </div>
+        <div class="panel-actions">
+            <a href="{% url 'reports:export' %}" class="btn btn--success">Скачать отчёт (HTML)</a>
+            <a href="{% url 'files:processor' %}" class="btn">← Обработка</a>
+        </div>
+    </div>
+
+    <div class="report-grid">
+        {% for card in cards %}
+        <div class="kpi-card">
+            <div class="kpi-card__value {% if card.status %}kpi-card__value--{{ card.status|lower }}{% endif %}">
+                {{ card.value }}
+            </div>
+            <div class="kpi-card__label">{{ card.label }}</div>
+            <div class="kpi-card__hint">{{ card.hint }}</div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="report-charts">
+        <div class="panel">
+            <div class="panel-head">
+                <span class="panel-title">Столбчатая: частота значений</span>
+                <form method="get" class="chart-form">
+                    <select name="bar" onchange="this.form.submit()">
+                        {% for col in columns %}
+                        <option value="{{ col }}" {% if col == bar_col %}selected{% endif %}>{{ col }}</option>
+                        {% endfor %}
+                    </select>
+                </form>
+            </div>
+            <div class="chart">
+                {{ bar_svg|safe|default:"<p class='page-sub'>Нет данных для диаграммы.</p>" }}
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-head">
+                <span class="panel-title">Линейная: значения столбца</span>
+                <form method="get" class="chart-form">
+                    <select name="line" onchange="this.form.submit()">
+                        {% for col in columns %}
+                        <option value="{{ col }}" {% if col == line_col %}selected{% endif %}>{{ col }}</option>
+                        {% endfor %}
+                    </select>
+                </form>
+            </div>
+            <div class="chart">
+                {{ line_svg|safe|default:"<p class='page-sub'>Нет числовых данных для диаграммы.</p>" }}
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-head">
+                <span class="panel-title">Круговая: доли значений</span>
+                <form method="get" class="chart-form">
+                    <select name="pie" onchange="this.form.submit()">
+                        {% for col in columns %}
+                        <option value="{{ col }}" {% if col == pie_col %}selected{% endif %}>{{ col }}</option>
+                        {% endfor %}
+                    </select>
+                </form>
+            </div>
+            <div class="chart chart--pie">
+                {{ pie_svg|safe|default:"<p class='page-sub'>Нет данных для диаграммы.</p>" }}
+            </div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-head">
+            <span class="panel-title">Данные (первые {{ table.rows|length }} строк)</span>
+        </div>
+        {% if table.rows %}
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        {% for col in table.columns %}
+                        <th>{{ col }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in table.rows %}
+                    <tr>
+                        {% for col in table.columns %}
+                        <td>{{ row|get_item:col }}</td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="page-sub">Пусто.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

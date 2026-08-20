@@ -1079,3 +1079,34 @@ code, .code {
     font-size: 13px;
 }
 .stage-errors__msg { margin: 6px 0 0; color: var(--text-muted); }
+
+/* ── Report Builder ─────────────────────────────────────── */
+
+.report-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 20px; }
+.kpi-card {
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface-2);
+    box-shadow: var(--shadow);
+}
+.kpi-card__value { font-family: var(--font-mono); font-size: 24px; line-height: 1.1; }
+.kpi-card__value--good { color: var(--success); }
+.kpi-card__value--warning { color: var(--warn); }
+.kpi-card__value--critical { color: var(--error); }
+.kpi-card__label { margin-top: 4px; font-weight: 600; font-size: 13px; }
+.kpi-card__hint { color: var(--text-muted); font-size: 12px; }
+
+.report-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; margin-bottom: 20px; }
+.chart { margin-top: 8px; overflow-x: auto; }
+.chart svg { width: 100%; height: auto; max-width: 560px; }
+.chart--pie svg { max-width: 340px; }
+.chart-form select {
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    padding: 4px 8px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+}

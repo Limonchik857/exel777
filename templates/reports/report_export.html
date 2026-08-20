@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+{% load core_tags %}
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Отчёт — {{ source_name }}</title>
+<style>
+  :root { --bg:#05070c; --panel:#0c111a; --panel2:#101726; --line:#1e2738;
+          --text:#cdd3df; --muted:#8b93a7; --accent:#6fa0ff; --hot:#ffb454; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:24px; background:var(--bg); color:var(--text);
+         font:14px/1.5 Inter, system-ui, sans-serif; }
+  .head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:18px; }
+  .head h1 { margin:0; font-size:20px; }
+  .head .src { color:var(--muted); font-family:'JetBrains Mono', monospace; font-size:12px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-bottom:20px; }
+  .kpi { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+  .kpi .v { font-family:'JetBrains Mono', monospace; font-size:22px; color:var(--accent); }
+  .kpi .l { color:var(--muted); font-size:12px; margin-top:2px; }
+  .charts { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:12px; margin-bottom:20px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; }
+  .panel h2 { margin:0 0 8px; font-size:13px; color:var(--muted); font-weight:600; }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:600; }
+  .footer { color:var(--muted); font-size:11px; margin-top:20px; }
+</style>
+</head>
+<body>
+  <div class="head">
+    <h1>Отчёт: {{ source_name }}</h1>
+    <span class="src">{{ total_rows }} строк · {{ columns|length }} столбцов</span>
+  </div>
+
+  <div class="grid">
+    {% for card in cards %}
+    <div class="kpi">
+      <div class="v">{{ card.value }}</div>
+      <div class="l">{{ card.label }} — {{ card.hint }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="charts">
+    {% if bar_svg %}
+    <div class="panel"><h2>Частота значений: {{ bar_col }}</h2>{{ bar_svg|safe }}</div>
+    {% endif %}
+    {% if line_svg %}
+    <div class="panel"><h2>Значения: {{ line_col }}</h2>{{ line_svg|safe }}</div>
+    {% endif %}
+    {% if pie_svg %}
+    <div class="panel"><h2>Доли: {{ pie_col }}</h2>{{ pie_svg|safe }}</div>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <h2>Данные (первые {{ table.rows|length }} строк)</h2>
+    <table>
+      <thead><tr>{% for col in table.columns %}<th>{{ col }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for row in table.rows %}
+        <tr>{% for col in table.columns %}<td>{{ row|get_item:col }}</td>{% endfor %}</tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="footer">office data studio — сформировано автоматически</div>
+</body>
+</html>

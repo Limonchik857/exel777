@@ -30,6 +30,8 @@
                class="nav-link {% if section == 'processor' %}active{% endif %}">Обработка</a>
             <a href="{% url 'quality:index' %}" title="Анализ качества данных"
                class="nav-link {% if section == 'quality' %}active{% endif %}">Quality</a>
+            <a href="{% url 'reports:index' %}" title="Отчёты по данным"
+               class="nav-link {% if section == 'reports' %}active{% endif %}">Отчёт</a>
             <a href="{% url 'workflows:index' %}" title="Сохранённые последовательности операций"
                class="nav-link {% if section == 'workflows' %}active{% endif %}">Пайплайны</a>
             <a href="{% url 'files:history' %}" title="История обработки"

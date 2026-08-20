@@ -43,6 +43,8 @@ class Workflow(models.Model):
     next_run = models.DateTimeField(null=True, blank=True)
     last_run_at = models.DateTimeField(null=True, blank=True)
 
+    email_recipient = models.EmailField(blank=True, default="")
+
     objects = WorkflowQuerySet.as_manager()
 
     class Meta:

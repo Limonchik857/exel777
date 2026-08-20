@@ -1,9 +1,11 @@
-﻿"""Р›РѕРіРёРєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ Рё Р·Р°РїСѓСЃРєР° workflow."""
+﻿"""Логика сохранения и запуска workflow."""
 
 from datetime import UTC, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
+from django.conf import settings
 from django.core.files.base import ContentFile
+from django.core.mail import EmailMessage
 from django.utils import timezone
 
 from files.models import ProcessedFile, UploadedFile
@@ -16,9 +18,9 @@ from .models import Execution, Workflow, WorkflowOperation
 
 
 def create_workflow_from_session(request, name, description=""):
-    """РЎРѕС…СЂР°РЅСЏРµС‚ РїРѕСЃР»РµРґРѕРІР°С‚РµР»СЊРЅРѕСЃС‚СЊ РѕРїРµСЂР°С†РёР№ С‚РµРєСѓС‰РµР№ СЃРµСЃСЃРёРё РєР°Рє workflow.
+    """Сохраняет последовательность операций текущей сессии как workflow.
 
-    Р­РєСЃРїРѕСЂС‚С‹ (Р·Р°РїРёСЃРё 'export') РІ workflow РЅРµ РїРѕРїР°РґР°СЋС‚.
+    Экспорты (записи 'export') в workflow не попадают.
     """
     state = request.session.get("processing")
     if not state or not state["history"]:
@@ -50,7 +52,7 @@ def create_workflow_from_session(request, name, description=""):
 
 
 def run_workflow(user, workflow, request_file):
-    """Р—Р°РїСѓСЃРєР°РµС‚ workflow РЅР° РЅРѕРІРѕРј С„Р°Р№Р»Рµ. Р’РѕР·РІСЂР°С‰Р°РµС‚ Execution."""
+    """Запускает workflow на новом файле. Возвращает Execution."""
     execution = Execution.objects.create(
         user=user,
         workflow=workflow,
@@ -93,21 +95,21 @@ def run_workflow(user, workflow, request_file):
                         "error": str(exc),
                     }
                 ]
-                execution.error = f"РЁР°Рі {index + 1}: {str(exc)}"
+                execution.error = f"Шаг {index + 1}: {str(exc)}"
                 execution.completed_at = timezone.now()
                 execution.save()
                 return execution
-            except Exception as exc:
+            except Exception:
                 execution.status = Execution.Status.FAILED
                 execution.stage_errors = [
                     {
                         "order": index,
                         "op": step.operation_type,
                         "label": describe_operation(step.operation_type, step.configuration),
-                        "error": "РќРµРїСЂРµРґРІРёРґРµРЅРЅР°СЏ РѕС€РёР±РєР° РЅР° С€Р°РіРµ.",
+                        "error": "Непредвиденная ошибка на шаге.",
                     }
                 ]
-                execution.error = f"РЁР°Рі {index + 1}: РЅРµРїСЂРµРґРІРёРґРµРЅРЅР°СЏ РѕС€РёР±РєР°."
+                execution.error = f"Шаг {index + 1}: непредвиденная ошибка."
                 execution.completed_at = timezone.now()
                 execution.save()
                 return execution
@@ -142,6 +144,9 @@ def run_workflow(user, workflow, request_file):
         execution.rows_after = rows_after
         execution.completed_at = timezone.now()
         execution.save()
+
+        if workflow.email_recipient:
+            _send_result_email(workflow, execution)
         return execution
     except OperationError as exc:
         execution.status = Execution.Status.FAILED
@@ -151,23 +156,52 @@ def run_workflow(user, workflow, request_file):
         return execution
     except Exception:
         execution.status = Execution.Status.FAILED
-        execution.error = "РќРµ СѓРґР°Р»РѕСЃСЊ РѕР±СЂР°Р±РѕС‚Р°С‚СЊ С„Р°Р№Р». РџСЂРѕРІРµСЂСЊС‚Рµ РµРіРѕ СЃРѕРґРµСЂР¶РёРјРѕРµ."
+        execution.error = "Не удалось обработать файл. Проверьте его содержимое."
         execution.completed_at = timezone.now()
         execution.save()
         return execution
 
 
-def _max_size():
-    from django.conf import settings
+def _send_result_email(workflow, execution):
+    """Отправляет результат пайплайна на email получателя (если указан)."""
+    processed = execution.output_file
+    if processed is None:
+        return
+    try:
+        processed.file.open("rb")
+        message = EmailMessage(
+            subject=f"Результат пайплайна «{workflow.name}»",
+            body=(
+                f"Пайплайн «{workflow.name}» выполнен успешно.\n"
+                f"Файл: {processed.original_name}\n"
+                f"Строк: {execution.rows_before} → {execution.rows_after}\n"
+            ),
+            to=[workflow.email_recipient],
+        )
+        message.attach(processed.original_name, processed.file.read(), "application/octet-stream")
+        message.send()
+    except Exception:
+        # Доставка по email не должна ломать пайплайн — ошибка логируется.
+        import logging
 
+        logging.getLogger(__name__).warning(
+            "Не удалось отправить результат пайплайна %s на %s",
+            workflow.pk,
+            workflow.email_recipient,
+        )
+    finally:
+        processed.file.close()
+
+
+def _max_size():
     return settings.DATA_MAX_FILE_SIZE
 
 
 def compute_next_run(workflow, now=None):
-    """Р’С‹С‡РёСЃР»СЏРµС‚ СЃР»РµРґСѓСЋС‰РёР№ Р·Р°РїСѓСЃРє workflow РїРѕ СЂР°СЃРїРёСЃР°РЅРёСЋ.
+    """Вычисляет следующий запуск workflow по расписанию.
 
-    Р’РѕР·РІСЂР°С‰Р°РµС‚ aware datetime РІ timezone workflow (РёР»Рё None, РµСЃР»Рё СЂР°СЃРїРёСЃР°РЅРёРµ
-    РЅРµ Р·Р°РґР°РЅРѕ). Р”РЅРё РЅРµРґРµР»Рё: 0=РџРЅ вЂ¦ 6=Р’СЃ; РґР»СЏ monthly schedule_days вЂ” РґРЅРё РјРµСЃСЏС†Р°.
+    Возвращает aware datetime в UTC (или None, если расписание не задано).
+    Дни недели: 0=Пн … 6=Вс; для monthly schedule_days — дни месяца.
     """
     if not workflow.schedule_active or not workflow.schedule_time:
         return None
@@ -186,7 +220,9 @@ def compute_next_run(workflow, now=None):
     candidate = local_now
     for _ in range(366 * 2):
         candidate = candidate + timedelta(days=1)
-        candidate = candidate.replace(hour=run_time.hour, minute=run_time.minute, second=0, microsecond=0)
+        candidate = candidate.replace(
+            hour=run_time.hour, minute=run_time.minute, second=0, microsecond=0
+        )
         if sched_type == Workflow.ScheduleType.DAILY:
             return candidate.astimezone(UTC)
         if sched_type == Workflow.ScheduleType.WEEKLY:
@@ -214,7 +250,7 @@ def save_next_run(workflow, now=None):
 
 
 def apply_schedule(workflow, form_data):
-    """РџСЂРёРјРµРЅСЏРµС‚ РЅР°СЃС‚СЂРѕР№РєРё СЂР°СЃРїРёСЃР°РЅРёСЏ Рє workflow Рё РїРµСЂРµСЃС‡РёС‚С‹РІР°РµС‚ next_run."""
+    """Применяет настройки расписания к workflow и пересчитывает next_run."""
     workflow.schedule_type = form_data["schedule_type"]
     workflow.schedule_time = form_data["schedule_time"]
     workflow.schedule_days = [
@@ -222,18 +258,19 @@ def apply_schedule(workflow, form_data):
     ]
     workflow.timezone = form_data.get("timezone") or workflow.timezone
     workflow.schedule_active = bool(form_data.get("schedule_active", False))
+    workflow.email_recipient = form_data.get("email_recipient", "") or ""
     workflow.save(update_fields=[
         "schedule_type", "schedule_time", "schedule_days",
-        "timezone", "schedule_active", "next_run",
+        "timezone", "schedule_active", "email_recipient", "next_run",
     ])
     save_next_run(workflow)
 
 
 def run_due_pipelines(now=None):
-    """Р—Р°РїСѓСЃРєР°РµС‚ РІСЃРµ Р°РєС‚РёРІРЅС‹Рµ СЂР°СЃРїРёСЃР°РЅРёСЏ, РІСЂРµРјСЏ РєРѕС‚РѕСЂС‹С… РЅР°СЃС‚СѓРїРёР»Рѕ (РґР»СЏ scheduler).
+    """Запускает все активные расписания, время которых наступило (для scheduler).
 
-    Р Р°Р±РѕС‚Р°РµС‚ РЅР° РїРѕСЃР»РµРґРЅРµРј Р·Р°РіСЂСѓР¶РµРЅРЅРѕРј С„Р°Р№Р»Рµ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ. Р’РѕР·РІСЂР°С‰Р°РµС‚
-    СЃРїРёСЃРѕРє РєРѕСЂС‚РµР¶РµР№ (workflow, execution).
+    Работает на последнем загруженном файле пользователя. Возвращает
+    список кортежей (workflow, execution).
     """
     if now is None:
         now = timezone.now()

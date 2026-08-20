@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core import mail
 from django.test import TestCase
 from django.urls import reverse
 from zoneinfo import ZoneInfo
@@ -323,3 +324,41 @@ class PipelineScheduleTests(TestCase):
         run.refresh_from_db()
         self.assertIsNotNone(run.duration)
         self.assertGreaterEqual(run.duration, 4.0)
+
+    def test_email_recipient_sends_result(self):
+        from django.test import override_settings
+
+        wf = Workflow.objects.create(
+            user=self.user,
+            name="MailPipeline",
+            email_recipient="boss@example.com",
+        )
+        WorkflowOperation.objects.create(
+            workflow=wf,
+            operation_type="remove_empty_rows",
+            order=0,
+        )
+        with override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend"):
+            response = self.client.post(
+                reverse("workflows:run", args=[wf.pk]),
+                {"file": SimpleUploadedFile("april.csv", make_csv_bytes(sample_df()), content_type="text/csv")},
+            )
+        self.assertRedirects(response, reverse("workflows:detail", args=[wf.pk]))
+        execution = Execution.objects.get(workflow=wf)
+        self.assertEqual(execution.status, Execution.Status.SUCCESS)
+        self.assertEqual(len(mail.outbox), 1)
+        msg = mail.outbox[0]
+        self.assertEqual(msg.to, ["boss@example.com"])
+        self.assertEqual(len(msg.attachments), 1)
+
+    def test_email_recipient_empty_no_email(self):
+        from django.test import override_settings
+
+        wf = Workflow.objects.create(user=self.user, name="NoMail")
+        WorkflowOperation.objects.create(workflow=wf, operation_type="remove_empty_rows", order=0)
+        with override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend"):
+            self.client.post(
+                reverse("workflows:run", args=[wf.pk]),
+                {"file": SimpleUploadedFile("april.csv", make_csv_bytes(sample_df()), content_type="text/csv")},
+            )
+        self.assertEqual(len(mail.outbox), 0)
