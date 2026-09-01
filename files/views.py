@@ -164,8 +164,11 @@ def upload(request):
 @login_required
 def processor(request):
     if not proc.has_session(request):
-        messages.info(request, "Сначала загрузите файл.")
-        return redirect("files:upload")
+        return render(
+            request,
+            "files/processor.html",
+            {"section": "processor", "no_file": True, "empty": "Загрузите файл, чтобы начать обработку данных."},
+        )
 
     state = proc.get_state(request)
     df = proc.current_df(request)
@@ -201,7 +204,7 @@ def processor(request):
         request,
         "files/processor.html",
         {
-            "section": "files",
+            "section": "processor",
             "state": state,
             "uploaded": uploaded,
             "source_name": state["source_name"],

@@ -106,7 +106,9 @@ class QualityViewTests(TestCase):
 
     def test_quality_requires_session(self):
         response = self.client.get(reverse("quality:index"))
-        self.assertRedirects(response, reverse("files:upload"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Файл не загружен")
+        self.assertContains(response, "Загрузить файл")
 
     def test_quality_page_renders(self):
         import pandas as pd

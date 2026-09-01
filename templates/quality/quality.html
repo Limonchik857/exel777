@@ -5,6 +5,20 @@
 
 {% block content %}
 <div class="page page--wide">
+    {% if no_file %}
+    <div class="page-head">
+        <div>
+            <h1>Data Quality</h1>
+            <p class="page-desc">Проверка качества данных: дубликаты, пустые значения, email, телефоны и даты.</p>
+        </div>
+    </div>
+    <div class="empty">
+        <div class="empty__icon">✓</div>
+        <div class="empty__title">Файл не загружен</div>
+        <div class="empty__text">Загрузите файл, чтобы проанализировать качество данных.</div>
+        <a href="{% url 'files:upload' %}" class="btn btn--primary">Загрузить файл</a>
+    </div>
+    {% else %}
     <div class="page-head">
         <div>
             <h1>Data Quality</h1>
@@ -18,7 +32,9 @@
             <a href="{% url 'files:processor' %}" class="btn">← Обработка</a>
         </div>
     </div>
+    {% endif %}
 
+    {% if not no_file %}
     <div class="quality-hero">
         <div class="score-ring score-ring--{{ report.status|lower }}">
             <div class="score-ring__value">{{ report.score }}</div>
@@ -137,5 +153,6 @@
             {% endfor %}
         </div>
     </div>
+    {% endif %}
 </div>
 {% endblock %}

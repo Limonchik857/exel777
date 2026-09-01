@@ -1,10 +1,27 @@
 {% extends "base.html" %}
 {% load core_tags %}
 
-{% block title %}Обработка: {{ source_name }}{% endblock %}
+{% block title %}Обработка{{ source_name|default:"" }}{% endblock %}
 
 {% block content %}
 <div class="page page--wide">
+    {% if no_file %}
+    <div class="page-head">
+        <div>
+            <h1>Обработка данных</h1>
+            <p class="page-desc">Инструменты для очистки и преобразования таблиц.</p>
+        </div>
+    </div>
+    <div class="empty">
+        <div class="empty__icon">▤</div>
+        <div class="empty__title">Файл не загружен</div>
+        <div class="empty__text">
+            Загрузите Excel или CSV-файл, чтобы использовать операции обработки,
+            анализ качества и построение отчётов.
+        </div>
+        <a href="{% url 'files:upload' %}" class="btn btn--primary">Загрузить файл</a>
+    </div>
+    {% else %}
     <div class="page-head">
         <div>
             <h1>Обработка данных</h1>
@@ -22,7 +39,9 @@
             <a href="{% url 'files:upload' %}" class="btn btn--ghost">Новый файл</a>
         </div>
     </div>
+    {% endif %}
 
+    {% if not no_file %}
     <div class="processor">
         <!-- Левая колонка: состояние -->
         <aside class="processor-side sticky-side">
@@ -455,5 +474,6 @@
             </div>
         </div>
     </div>
+    {% endif %}
 </div>
 {% endblock %}

@@ -11,10 +11,11 @@ from .services import analyze_quality
 @login_required
 def quality(request):
     if not proc.has_session(request):
-        from django.contrib import messages
-
-        messages.info(request, "Сначала загрузите файл.")
-        return redirect("files:upload")
+        return render(
+            request,
+            "quality/quality.html",
+            {"section": "quality", "no_file": True},
+        )
 
     from files.models import UploadedFile
 

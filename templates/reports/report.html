@@ -5,6 +5,20 @@
 
 {% block content %}
 <div class="page page--wide">
+    {% if no_file %}
+    <div class="page-head">
+        <div>
+            <h1>Отчёт</h1>
+            <p class="page-desc">Сводка и графики по данным: KPI, таблица, диаграммы.</p>
+        </div>
+    </div>
+    <div class="empty">
+        <div class="empty__icon">▦</div>
+        <div class="empty__title">Файл не загружен</div>
+        <div class="empty__text">Загрузите файл, чтобы построить отчёт с KPI и диаграммами.</div>
+        <a href="{% url 'files:upload' %}" class="btn btn--primary">Загрузить файл</a>
+    </div>
+    {% else %}
     <div class="page-head">
         <div>
             <h1>Отчёт</h1>
@@ -18,7 +32,9 @@
             <a href="{% url 'files:processor' %}" class="btn">← Обработка</a>
         </div>
     </div>
+    {% endif %}
 
+    {% if not no_file %}
     <div class="report-grid">
         {% for card in cards %}
         <div class="kpi-card">
@@ -110,5 +126,6 @@
         <p class="page-sub">Пусто.</p>
         {% endif %}
     </div>
+    {% endif %}
 </div>
 {% endblock %}

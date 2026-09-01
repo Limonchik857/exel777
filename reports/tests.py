@@ -67,7 +67,9 @@ class ReportViewTests(TestCase):
 
     def test_report_requires_session(self):
         response = self.client.get(reverse("reports:index"))
-        self.assertRedirects(response, reverse("files:upload"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Файл не загружен")
+        self.assertContains(response, "Загрузить файл")
 
     def test_report_page_renders(self):
         self.client.post(

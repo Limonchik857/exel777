@@ -20,8 +20,11 @@ from .services import (
 @login_required
 def report(request):
     if not proc.has_session(request):
-        messages.info(request, "Сначала загрузите файл.")
-        return redirect("files:upload")
+        return render(
+            request,
+            "reports/report.html",
+            {"section": "reports", "no_file": True},
+        )
 
     state = proc.get_state(request)
     df = proc.current_df(request)
@@ -58,8 +61,11 @@ def report(request):
 @login_required
 def report_export(request):
     if not proc.has_session(request):
-        messages.info(request, "Сначала загрузите файл.")
-        return redirect("files:upload")
+        return render(
+            request,
+            "reports/report.html",
+            {"section": "reports", "no_file": True},
+        )
 
     state = proc.get_state(request)
     df = proc.current_df(request)

@@ -25,7 +25,9 @@ class ProcessorFlowTests(TestCase):
 
     def test_processor_requires_upload(self):
         response = self.client.get(reverse("files:processor"))
-        self.assertRedirects(response, reverse("files:upload"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Файл не загружен")
+        self.assertContains(response, "Загрузить файл")
 
     def test_processor_shows_preview(self):
         self._upload()
